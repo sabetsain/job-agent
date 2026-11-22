@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mutmut-cache/
+mutants/
+data/*.db
+*.egg-info/
+dist/
+build/
+config/*.yaml
+!config/*.example.yaml
