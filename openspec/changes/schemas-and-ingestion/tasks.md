@@ -13,21 +13,21 @@
 
 ## 3. Job Discovery & Ingestion Adapters
 
-- [ ] 3.1 Implement canonical internal `job_id` generator (16-char SHA-256 hex prefix) and deterministic `da`/`en` language classifier (Danish character/lexical markers + seeded `langdetect` with `DetectorFactory.seed = 0`) in `src/job_agent/sources/normalize.py`
-- [ ] 3.2 Implement `JobSource` protocol/base class and HTML-to-text cleaner in `src/job_agent/sources/base.py`
-- [ ] 3.3 Implement free JSON API adapters in `src/job_agent/sources/` for Arbeitnow, Remotive, Himalayas (optional Bearer token), and Jobicy (`https://jobicy.com/api/jobs` with `>= 1s` spacing if paginated and `HTTP 429` + `Retry-After` handling)
-- [ ] 3.4 Implement Jobindex dynamic per-search public RSS adapter in `src/job_agent/sources/jobindex.py`
-- [ ] 3.5 Implement Manual Drop URL fetcher & raw-text normalizer (`src/job_agent/sources/manual.py`) with loud, user-visible failure reporting (non-zero exit + clear cause for HTTP 401/403, login redirects, CAPTCHA/anti-bot blocks, HTTP 404/5xx, timeouts, or unparseable descriptions)
-- [ ] 3.6 Implement once-daily ingestion orchestrator (`src/job_agent/sources/runner.py`) that loads enabled sources from `sources.yaml`, invokes each adapter once per run, isolates per-source failures, normalizes postings, assigns `job_id`, and detects `da`/`en` language
-- [ ] 3.7 Add intent-rooted unit tests in `tests/test_sources.py` using mocked HTTP/RSS fixtures covering adapter parsing, Jobicy `429`/`Retry-After`, partial source failure isolation, loud Manual Drop failure cases, `job_id` determinism, and Danish/English detection
+- [x] 3.1 Implement canonical internal `job_id` generator (16-char SHA-256 hex prefix) and deterministic `da`/`en` language classifier (Danish character/lexical markers + seeded `langdetect` with `DetectorFactory.seed = 0`) in `src/job_agent/sources/normalize.py`
+- [x] 3.2 Implement `JobSource` protocol/base class and HTML-to-text cleaner in `src/job_agent/sources/base.py`
+- [x] 3.3 Implement free JSON API adapters in `src/job_agent/sources/` for Arbeitnow, Remotive, Himalayas (optional Bearer token), and Jobicy (`https://jobicy.com/api/jobs` with `>= 1s` spacing if paginated and `HTTP 429` + `Retry-After` handling)
+- [x] 3.4 Implement Jobindex dynamic per-search public RSS adapter in `src/job_agent/sources/jobindex.py`
+- [x] 3.5 Implement Manual Drop URL fetcher & raw-text normalizer (`src/job_agent/sources/manual.py`) with loud, user-visible failure reporting (non-zero exit + clear cause for HTTP 401/403, login redirects, CAPTCHA/anti-bot blocks, HTTP 404/5xx, timeouts, or unparseable descriptions)
+- [x] 3.6 Implement once-daily ingestion orchestrator (`src/job_agent/sources/runner.py`) that loads enabled sources from `sources.yaml`, invokes each adapter once per run, isolates per-source failures, normalizes postings, assigns `job_id`, and detects `da`/`en` language
+- [x] 3.7 Add intent-rooted unit tests in `tests/test_sources.py` using mocked HTTP/RSS fixtures covering adapter parsing, Jobicy `429`/`Retry-After`, partial source failure isolation, loud Manual Drop failure cases, `job_id` determinism, and Danish/English detection
 
 ## 4. Deterministic Pre-Filter Engine
 
-- [ ] 4.1 Implement seniority hard-gate filter (excluded title keywords in EN/DA — keeping `Architect` eligible — plus explicit years-of-experience ceiling regex) in `src/job_agent/filters/prefilter.py`
-- [ ] 4.2 Implement posting freshness filter (`max_age_days` cutoff with enforced future `application_deadline` pass-through, enforced `posted_at=None` pass-through, and enforced `source="manual"` bypass; stale postings marked for discard without storage) in `src/job_agent/filters/prefilter.py`
-- [ ] 4.3 Implement location & work-mode eligibility filter (Copenhagen/Denmark/EU + EU/CET-compatible remote; rejecting US-only or disallowed locations) in `src/job_agent/filters/prefilter.py`
-- [ ] 4.4 Implement dealbreaker negative filter (excluded companies, industries, contract types, red-flag keywords; clean pass-through when empty) and composite `PreFilterResult(passed, reason, discard_without_storing)`
-- [ ] 4.5 Add intent-rooted unit tests in `tests/test_prefilter.py` covering Senior/Staff/Lead rejections, Associate Solutions Architect pass-through, 5+ years rejection, entry-level/2-year pass-through, freshness boundaries (21 vs. 22 days discard, future deadline, missing `posted_at`, manual bypass), Copenhagen/EU-remote vs. US-only remote, and both empty-default and populated dealbreaker fixtures
+- [x] 4.1 Implement seniority hard-gate filter (excluded title keywords in EN/DA — keeping `Architect` eligible — plus explicit years-of-experience ceiling regex) in `src/job_agent/filters/prefilter.py`
+- [x] 4.2 Implement posting freshness filter (`max_age_days` cutoff with enforced future `application_deadline` pass-through, enforced `posted_at=None` pass-through, and enforced `source="manual"` bypass; stale postings marked for discard without storage) in `src/job_agent/filters/prefilter.py`
+- [x] 4.3 Implement location & work-mode eligibility filter (Copenhagen/Denmark/EU + EU/CET-compatible remote; rejecting US-only or disallowed locations) in `src/job_agent/filters/prefilter.py`
+- [x] 4.4 Implement dealbreaker negative filter (excluded companies, industries, contract types, red-flag keywords; clean pass-through when empty) and composite `PreFilterResult(passed, reason, discard_without_storing)`
+- [x] 4.5 Add intent-rooted unit tests in `tests/test_prefilter.py` covering Senior/Staff/Lead rejections, Associate Solutions Architect pass-through, 5+ years rejection, entry-level/2-year pass-through, freshness boundaries (21 vs. 22 days discard, future deadline, missing `posted_at`, manual bypass), Copenhagen/EU-remote vs. US-only remote, and both empty-default and populated dealbreaker fixtures
 
 ## 5. SQLite State Store, Cleanup, CLI & Mutation Testing
 
