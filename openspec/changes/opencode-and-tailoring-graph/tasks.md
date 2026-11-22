@@ -27,10 +27,10 @@
 
 ## 5. Typst Document Rendering (`basic-resume` CV + Custom Matching Cover Letter)
 
-- [ ] 5.1 Define `TailoredCV` and `TailoredCoverLetter` Pydantic v2 models in `src/job_agent/rendering/models.py` (strictly structured text fields; zero raw markup).
-- [ ] 5.2 Add offline-capable Typst templates in `src/job_agent/rendering/templates/`: `cv.typ` (vendoring/adapting the open-source MIT `basic-resume` layout) and `cover_letter.typ` (custom matching header, typography, accent, and margins), supporting localized `da`/`en` headings, native UTF-8 Danish characters (`æ`, `ø`, `å`), and locked body font bounds `[9.0pt, 12.0pt]` (body only, excluding headers/sub-headers/footers).
-- [ ] 5.3 Implement `src/job_agent/rendering/compiler.py` invoking `typst.compile(..., sys_inputs={"data": json_str})` and counting PDF pages deterministically via `pypdf`, returning structured page-overflow diagnostics when `page_count > max_pages`.
-- [ ] 5.4 Add rendering tests in `tests/test_rendering.py` verifying offline EN and DA PDF compilation, UTF-8 Danish characters, body font bounds, single-page pass, and multi-page overflow detection.
+- [x] 5.1 Define `TailoredCV` and `TailoredCoverLetter` Pydantic v2 models in `src/job_agent/rendering/models.py` (strictly structured text fields; zero raw markup).
+- [x] 5.2 Add offline-capable Typst templates in `src/job_agent/rendering/templates/`: `cv.typ` (vendoring/adapting the open-source MIT `basic-resume` layout) and `cover_letter.typ` (custom matching header, typography, accent, and margins), supporting localized `da`/`en` headings, native UTF-8 Danish characters (`æ`, `ø`, `å`), and locked body font bounds `[9.0pt, 12.0pt]` (body only, excluding headers/sub-headers/footers).
+- [x] 5.3 Implement `src/job_agent/rendering/compiler.py` invoking `typst.compile(..., sys_inputs={"data": json_str})` and counting PDF pages deterministically via `pypdf`, returning structured page-overflow diagnostics when `page_count > max_pages`.
+- [x] 5.4 Add rendering tests in `tests/test_rendering.py` verifying offline EN and DA PDF compilation, UTF-8 Danish characters, body font bounds, single-page pass, and multi-page overflow detection.
 
 ## 6. Two-Pass Auditing & LangGraph Tailoring / HITL Ideation Graph
 
