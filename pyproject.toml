@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "job-agent"
 version = "0.1.0"
 description = "Deterministic-first autonomous job-hunting and application co-pilot"
-readme = "docs/INTENT.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",
