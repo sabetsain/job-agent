@@ -1,0 +1,102 @@
+target_roles:
+  primary:
+    - "Junior Software Engineer"
+    - "Associate Software Engineer"
+    - "Graduate Software Engineer"
+    - "Software Developer"
+    - "Backend Developer"
+  adjacent:
+    - "Associate Solutions Architect"
+    - "Junior Cloud Engineer"
+    - "Junior Platform Engineer"
+    - "Data Engineer"
+
+locations:
+  allowed_cities:
+    - "Copenhagen"
+    - "København"
+    - "Frederiksberg"
+    - "Lyngby"
+  allowed_countries:
+    - "Denmark"
+    - "Danmark"
+  allowed_regions:
+    - "Europe"
+    - "EU"
+    - "EMEA"
+    - "Nordics"
+    - "Scandinavia"
+    - "Worldwide"
+  allowed_work_modes:
+    - "onsite"
+    - "hybrid"
+    - "remote"
+  remote_allowed_regions:
+    - "Denmark"
+    - "Europe"
+    - "EU"
+    - "EMEA"
+    - "CET"
+    - "Worldwide"
+
+seniority_policy:
+  excluded_title_keywords:
+    - "senior"
+    - "sr."
+    - "sr "
+    - "staff"
+    - "principal"
+    - "lead"
+    - "manager"
+    - "director"
+    - "head of"
+    - "vp"
+    - "chief"
+    - "seniorudvikler"
+    - "chef"
+    - "leder"
+  max_years_experience: 2
+  entry_level:
+    max_years: 1
+    min_must_have_coverage: 0.65
+  stretch:
+    max_years: 2
+    min_must_have_coverage: 0.95
+
+freshness_policy:
+  max_age_days: 21
+  preferred_age_days: 7
+  daily_draft_limit: 3
+
+skills:
+  must_have:
+    - "Python"
+    - "SQL"
+    - "Git"
+  nice_to_have:
+    - "Docker"
+    - "GCP"
+    - "FastAPI"
+    - "Pulumi"
+    - "TypeScript"
+
+dealbreakers:
+  excluded_companies: []
+  excluded_industries: []
+  excluded_contract_types: []
+  red_flag_keywords: []
+
+scoring_rubric:
+  role_seniority_weight: 0.30
+  must_have_skills_weight: 0.35
+  domain_fit_weight: 0.20
+  nice_to_have_weight: 0.15
+  min_fit_score: 7.5
+
+layout_guardrails:
+  max_cv_pages: 1
+  max_cover_letter_pages: 1
+  min_font_size_pt: 10.0
+  preserve_whitespace_and_margins: true
+
+voice_skill_path: ".agent/skills/application-voice"

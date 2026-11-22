@@ -1,0 +1,1 @@
+"""Deterministic pre-filtering rules."""

@@ -1,0 +1,22 @@
+sources:
+  arbeitnow:
+    enabled: true
+    endpoint: "https://www.arbeitnow.com/api/job-board-api"
+  remotive:
+    enabled: true
+    endpoint: "https://remotive.com/api/remote-jobs"
+    category: "software-dev"
+  himalayas:
+    enabled: true
+    endpoint: "https://himalayas.app/jobs/api"
+    limit: 50
+    api_key_env: "HIMALAYAS_API_KEY"
+  jobicy:
+    enabled: true
+    endpoint: "https://jobicy.com/api/jobs"
+    geo: "europe"
+    count: 50
+    min_request_interval_seconds: 1.0
+  jobindex_rss:
+    enabled: false
+    feed_urls: []

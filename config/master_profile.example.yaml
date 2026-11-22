@@ -1,0 +1,84 @@
+identity:
+  full_name: "Example Candidate"
+  email: "candidate@example.com"
+  phone: "+45 12 34 56 78"
+  location: "Copenhagen, Denmark"
+  linkedin_url: "https://linkedin.com/in/example"
+  github_url: "https://github.com/example"
+  website_url: "https://example.dev"
+
+summary_seed: >
+  Software engineer based in Copenhagen with hands-on experience building cloud-native Python
+  services, automated data pipelines, and Infrastructure-as-Code deployments with Pulumi.
+
+experiences:
+  - company: "Nordic Cloud Labs"
+    title: "Junior Software Engineer"
+    location: "Copenhagen, Denmark"
+    start_date: "2024-02"
+    end_date: "present"
+    bullets:
+      - label: "Backend APIs"
+        text: "Built FastAPI microservices handling ~1,200 daily requests with 99.9% uptime."
+        metrics:
+          - "~1,200 daily requests"
+          - "99.9% uptime"
+        skills:
+          - "Python"
+          - "FastAPI"
+          - "PostgreSQL"
+      - label: "Infrastructure Automation"
+        text: "Provisioned GCP Cloud Run services and Cloud SQL instances using Pulumi IaC."
+        skills:
+          - "Pulumi"
+          - "GCP"
+          - "Docker"
+
+projects:
+  - name: "OpenTelemetry Log Router"
+    url: "https://github.com/example/otel-router"
+    description: "CLI and daemon for routing structured logs across containerized workloads."
+    bullets:
+      - "Reduced log ingestion overhead by 35% via deterministic pre-filtering."
+    skills:
+      - "Python"
+      - "Docker"
+      - "OpenTelemetry"
+
+education:
+  - institution: "University of Copenhagen"
+    degree: "B.Sc. in Computer Science"
+    start_date: "2020-09"
+    end_date: "2023-06"
+    location: "Copenhagen, Denmark"
+    highlights:
+      - "Thesis on distributed systems consensus protocols."
+
+certifications:
+  - name: "Google Cloud Associate Cloud Engineer"
+    issuer: "Google Cloud"
+    date: "2024-06"
+
+languages:
+  - language: "en"
+    proficiency: "Native / Fluent"
+  - language: "da"
+    proficiency: "Fluent"
+
+skills:
+  languages:
+    - "Python"
+    - "SQL"
+    - "TypeScript"
+  frameworks:
+    - "FastAPI"
+    - "LangGraph"
+    - "Pydantic"
+  infrastructure:
+    - "Docker"
+    - "Pulumi"
+    - "GCP"
+    - "GitHub Actions"
+  databases:
+    - "PostgreSQL"
+    - "SQLite"

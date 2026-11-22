@@ -1,8 +1,8 @@
 ## 1. Project Setup
 
-- [ ] 1.1 Initialize `pyproject.toml` (Python 3.11+, dependencies: `pydantic>=2`, `pyyaml`, `httpx`, `feedparser`, `beautifulsoup4`, `langdetect`, `typer`, and dev dependencies: `pytest`, `respx`, `mutmut`) with `job-agent` CLI entrypoint and `mutmut` config targeting `src/job_agent/`
-- [ ] 1.2 Create package layout under `src/job_agent/` (`schemas/`, `sources/`, `filters/`, `storage/`, `cli.py`) and `tests/`
-- [ ] 1.3 Add example configuration files under `config/` (`master_profile.example.yaml`, `target_roles.example.yaml`, `sources.example.yaml`) and `.gitignore` (ignoring `data/*.db` and personal `config/*.yaml` overrides)
+- [x] 1.1 Initialize `pyproject.toml` (Python 3.11+, dependencies: `pydantic>=2`, `pyyaml`, `httpx`, `feedparser`, `beautifulsoup4`, `langdetect`, `typer`, and dev dependencies: `pytest`, `respx`, `mutmut`) with `job-agent` CLI entrypoint and `mutmut` config targeting `src/job_agent/`
+- [x] 1.2 Create package layout under `src/job_agent/` (`schemas/`, `sources/`, `filters/`, `storage/`, `cli.py`) and `tests/`
+- [x] 1.3 Add example configuration files under `config/` (`master_profile.example.yaml`, `target_roles.example.yaml`, `sources.example.yaml`) and `.gitignore` (ignoring `data/*.db` and personal `config/*.yaml` overrides)
 
 ## 2. Domain Schemas & Config Loaders
 
