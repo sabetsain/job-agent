@@ -12,3 +12,7 @@
 - Subagents performing code edits or implementation work MUST run in isolated git worktrees / branched workspaces (`Workspace: "share"` or `"branch"`), never editing the parent working tree directly.
 - Commit frequently per feature or logical unit with clear conventional commit messages (`feat(...)`, `test(...)`, `chore(...)`).
 - Verify tests pass before merging subagent branches cleanly back into `main`.
+
+## Session Handoff
+
+- Latest session handoff document: `/Users/sebastianmcconnell/.gemini/handoffs/job-agent-schemas-and-ingestion-handoff.md`
