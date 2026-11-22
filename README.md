@@ -1,22 +1,15 @@
 # job-agent
 
-A deterministic-first, bilingual (`da`/`en`) personal job-hunting and application co-pilot targeting entry-level roles in **Copenhagen, Denmark (Europe)** and **Remote** positions.
+A personal job-hunting and application co-pilot built for finding entry-level roles in Copenhagen, Europe, and Remote positions. It discovers postings, filters out poor matches before spending LLM tokens, and supports truthful, tailored applications in both Danish and English while keeping me in control of review and submission.
 
-> **Living Source of Truth:** See [`docs/INTENT.md`](docs/INTENT.md) for the project's guiding principles, eligibility rules, and co-pilot workflows.
+The guiding principles, eligibility rules, and full co-pilot workflows live in [`docs/INTENT.md`](docs/INTENT.md).
 
-## Current Capabilities (`schemas-and-ingestion`)
+## What Works Today
 
-- **Validated Domain Schemas (`src/job_agent/schemas/`):**
-  - `MasterProfile`, `JobPreferences`, `SourcesConfig`, `RawJob`, and `JobPosting` validated with Pydantic v2 and loaded from YAML.
-  - Encodes tiered seniority rules (primarily entry-level, hard-excluding Senior+ titles while keeping *Architect* roles eligible), posting freshness bounds (`max_age_days=21`, `preferred_age_days=7`, `daily_draft_limit=3` upper cap), design-preserving layout guardrails (`min_font_size_pt >= 9.0`), and the required `/application-voice` skill path (`.agent/skills/application-voice`).
-- **Free & Open Job Discovery (`src/job_agent/sources/`):**
-  - Pluggable `JobSource` adapters designed for once-daily polling across **Arbeitnow**, **Remotive**, **Himalayas**, **Jobicy**, and **Jobindex RSS**, with isolated per-source error handling.
-  - **Manual Drop (`job-agent add`)** supporting raw text (`--text`, `--file`, stdin) or direct URLs, failing loudly with a clear user-facing error if blocked, auth-gated, or unparseable.
-  - Deterministic canonical `job_id` generation (16-char SHA-256 hex prefix) and deterministic Danish/English (`da`/`en`) language classification.
-- **Deterministic Pre-Filter (`src/job_agent/filters/`):**
-  - Filters out Senior+ roles, explicit `> 2` years experience requirements, stale postings older than `max_age_days` (discarded without storing, while preserving future `application_deadline` *ansøgningsfrist* roles, missing `posted_at`, and `manual` submissions), disallowed locations/work modes, and configured dealbreakers before any LLM tokens are spent.
-- **Local SQLite State Store & CLI (`src/job_agent/storage/`, `src/job_agent/cli.py`):**
-  - Postgres-portable `JobRepository` tracking application lifecycle, freshness-priority candidate ordering (prioritizing `<= 7`-day and future-deadline postings up to the daily cap), idempotent `job_id` skipping, and automatic 6-month (`180`-day) cleanup that preserves `Interviewing` rows.
+- **Domain Schemas (`src/job_agent/schemas/`):** Pydantic v2 models (`MasterProfile`, `JobPreferences`, `SourcesConfig`, `RawJob`, and `JobPosting`) loaded from YAML. These enforce seniority rules (targeting entry-level roles and excluding Senior+ titles while keeping Architect roles eligible), freshness bounds (`max_age_days=21`, `preferred_age_days=7`, `daily_draft_limit=3`), readable layout limits (`min_font_size_pt >= 9.0`), and the `.agent/skills/application-voice` skill path.
+- **Job Discovery (`src/job_agent/sources/`):** Pluggable `JobSource` adapters built for once-daily polling across Arbeitnow, Remotive, Himalayas, Jobicy, and Jobindex RSS, with isolated error handling per source. Also supports manual additions via `job-agent add` using raw text (`--text`, `--file`, stdin) or direct URLs, failing loudly if a page is blocked, behind auth, or unparseable. Each job gets a canonical 16-character SHA-256 `job_id` and deterministic Danish or English (`da`/`en`) language classification.
+- **Pre-Filtering (`src/job_agent/filters/`):** Drops Senior+ roles, postings asking for more than 2 years of experience, disallowed locations or work modes, configured dealbreakers, and stale postings older than `max_age_days` before any LLM call runs. Postings with a future `application_deadline` (*ansøgningsfrist*), missing `posted_at`, or manual submissions are preserved.
+- **SQLite State Store & CLI (`src/job_agent/storage/`, `src/job_agent/cli.py`):** A Postgres-portable `JobRepository` that tracks application status, skips already-seen `job_id`s, prioritizes postings from the last 7 days or with future deadlines up to the daily cap, and cleans up entries older than 180 days while keeping `Interviewing` rows intact.
 
 ## Quickstart
 
@@ -28,9 +21,9 @@ Requires Python 3.11+ and [`uv`](https://docs.astral.sh/uv/):
 uv sync --extra dev
 ```
 
-### 2. Configure Your Profile, Preferences & Sources
+### 2. Configure Profile, Preferences & Sources
 
-Copy the example YAML templates into personal config files (gitignored automatically):
+Copy the example YAML templates into personal config files (these are gitignored):
 
 ```bash
 cp config/master_profile.example.yaml config/master_profile.yaml
@@ -38,12 +31,12 @@ cp config/target_roles.example.yaml config/target_roles.yaml
 cp config/sources.example.yaml config/sources.yaml
 ```
 
-Edit `config/target_roles.yaml` and `config/sources.yaml` (e.g., add your filtered Jobindex RSS feed URLs under `jobindex_rss.feed_urls`).
+Fill in `config/target_roles.yaml` and `config/sources.yaml` (for example, add filtered Jobindex RSS feed URLs under `jobindex_rss.feed_urls`).
 
 ### 3. Run the CLI
 
 ```bash
-# Run once-daily discovery, pre-filtering, persistence, and 180-day cleanup
+# Run daily discovery, pre-filtering, persistence, and 180-day cleanup
 .venv/bin/job-agent ingest
 
 # Manually add a job from raw text
@@ -54,7 +47,7 @@ Edit `config/target_roles.yaml` and `config/sources.yaml` (e.g., add your filter
   --work-mode hybrid \
   --text "Entry-level Python and SQL role in Copenhagen."
 
-# Or manually add a job from a direct URL (fails loudly if auth-gated or unparseable)
+# Manually add a job from a direct URL (fails loudly if auth-gated or unparseable)
 .venv/bin/job-agent add --url "https://example.com/careers/junior-engineer"
 
 # Inspect stored jobs filtered by status or language
@@ -63,13 +56,13 @@ Edit `config/target_roles.yaml` and `config/sources.yaml` (e.g., add your filter
 
 ## Testing
 
-Run the full intent-rooted test suite:
+Run the test suite:
 
 ```bash
 .venv/bin/pytest -v
 ```
 
-Run mutation testing against core modules (`schemas/`, `filters/`, `sources/normalize.py`, `storage/`):
+Run mutation testing on the core modules (`schemas/`, `filters/`, `sources/normalize.py`, `storage/`):
 
 ```bash
 .venv/bin/mutmut run
@@ -78,9 +71,10 @@ Run mutation testing against core modules (`schemas/`, `filters/`, `sources/norm
 
 ## Repository Layout
 
-- `docs/INTENT.md` — Living intent document (non-technical source of truth)
-- `AGENTS.md` — Project agent & git worktree workflow rules
-- `openspec/` — OpenSpec configuration, specs, designs, and task checklists
-- `config/` — Example YAML templates (`*.example.yaml`)
-- `src/job_agent/` — Core Python package (`schemas/`, `sources/`, `filters/`, `storage/`, `pipeline.py`, `cli.py`)
-- `tests/` — Intent-rooted unit and integration tests
+- `docs/INTENT.md`: Living intent document covering project scope, principles, and workflows.
+- `AGENTS.md`: Project agent and git worktree workflow rules.
+- `.agent/skills/application-voice/`: Embedded Voice DNA and anti-AI rules for CVs and cover letters.
+- `openspec/`: OpenSpec configuration, specs, designs, and task checklists.
+- `config/`: Example YAML templates (`*.example.yaml`).
+- `src/job_agent/`: Core Python package (`schemas/`, `sources/`, `filters/`, `storage/`, `pipeline.py`, `cli.py`).
+- `tests/`: Unit and integration tests.
