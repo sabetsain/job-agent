@@ -7,11 +7,11 @@
 
 ## 2. Domain Schema & State Store Deltas
 
-- [ ] 2.1 Update `src/job_agent/schemas/jobs.py` to add `Scored_Out`, `Queued_For_Drafting`, and `Expired` to `ApplicationStatus`.
-- [ ] 2.2 Update `src/job_agent/schemas/preferences.py` to remove `voice_skill_path` and flat `ScoringRubric.min_fit_score`, enforce body font bounds (`min_font_size_pt` in `[9.0, 12.0]` and `max_body_font_size_pt` in `[min_font_size_pt, 12.0]`), and keep tiered `SeniorityPolicy` thresholds (`0.65` entry-level, `0.95` stretch).
-- [ ] 2.3 Create `src/job_agent/llm/config.py` with the `LLMConfig` Pydantic v2 schema and `load_llm_config` YAML loader supporting dual-tier `scoring_model` / `reasoning_model` and optional per-tier `base_url` / `api_key_env` overrides.
-- [ ] 2.4 Update `src/job_agent/storage/repository.py` to drain `Queued_For_Drafting` in freshness-priority + strict FIFO order (`created_at ASC`, `fit_score DESC`), add `expire_stale_queued_jobs(max_age_days=21)` (preserving `source="manual"`), add `count_queued_jobs()`, and add the `profile_update_suggestions` table (`id`, `job_id`, `kind`, `fact_text`, `category`, `created_at`, `consumed_at`) with insert, list-unconsumed, and mark-consumed methods.
-- [ ] 2.5 Update existing `tests/test_schemas.py` and `tests/test_storage_and_cli.py` (and add new tests for `LLMConfig`, body font bounds, FIFO queue draining, queue expiration, and `profile_update_suggestions`).
+- [x] 2.1 Update `src/job_agent/schemas/jobs.py` to add `Scored_Out`, `Queued_For_Drafting`, and `Expired` to `ApplicationStatus`.
+- [x] 2.2 Update `src/job_agent/schemas/preferences.py` to remove `voice_skill_path` and flat `ScoringRubric.min_fit_score`, enforce body font bounds (`min_font_size_pt` in `[9.0, 12.0]` and `max_body_font_size_pt` in `[min_font_size_pt, 12.0]`), and keep tiered `SeniorityPolicy` thresholds (`0.65` entry-level, `0.95` stretch).
+- [x] 2.3 Create `src/job_agent/llm/config.py` with the `LLMConfig` Pydantic v2 schema and `load_llm_config` YAML loader supporting dual-tier `scoring_model` / `reasoning_model` and optional per-tier `base_url` / `api_key_env` overrides.
+- [x] 2.4 Update `src/job_agent/storage/repository.py` to drain `Queued_For_Drafting` in freshness-priority + strict FIFO order (`created_at ASC`, `fit_score DESC`), add `expire_stale_queued_jobs(max_age_days=21)` (preserving `source="manual"`), add `count_queued_jobs()`, and add the `profile_update_suggestions` table (`id`, `job_id`, `kind`, `fact_text`, `category`, `created_at`, `consumed_at`) with insert, list-unconsumed, and mark-consumed methods.
+- [x] 2.5 Update existing `tests/test_schemas.py` and `tests/test_storage_and_cli.py` (and add new tests for `LLMConfig`, body font bounds, FIFO queue draining, queue expiration, and `profile_update_suggestions`).
 
 ## 3. OpenCode Go Client & Startup-Loaded System Prompts
 

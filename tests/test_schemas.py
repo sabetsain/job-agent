@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from job_agent.llm import DEFAULT_OPENCODE_BASE_URL, LLMConfig, load_llm_config
 from job_agent.schemas import (
     ApplicationStatus,
     FreshnessPolicy,
@@ -123,8 +124,10 @@ def test_load_valid_job_preferences_example_yaml() -> None:
     assert prefs.freshness_policy.daily_draft_limit == 3
     assert prefs.dealbreakers.excluded_companies == []
     assert prefs.layout_guardrails.min_font_size_pt == 10.0
+    assert prefs.layout_guardrails.max_body_font_size_pt == 12.0
     assert prefs.layout_guardrails.preserve_whitespace_and_margins is True
-    assert prefs.voice_skill_path == ".agent/skills/application-voice"
+    assert not hasattr(prefs, "voice_skill_path")
+    assert not hasattr(prefs.scoring_rubric, "min_fit_score")
 
 
 def test_seniority_policy_default_does_not_exclude_architect() -> None:
@@ -135,12 +138,19 @@ def test_seniority_policy_default_does_not_exclude_architect() -> None:
     assert "senior" in policy.excluded_title_keywords
 
 
-def test_layout_guardrails_min_font_size_boundary() -> None:
-    allowed = LayoutGuardrails(min_font_size_pt=9.0)
+def test_layout_guardrails_body_font_size_bounds() -> None:
+    allowed = LayoutGuardrails(min_font_size_pt=9.0, max_body_font_size_pt=12.0)
     assert allowed.min_font_size_pt == 9.0
+    assert allowed.max_body_font_size_pt == 12.0
 
     with pytest.raises(ValidationError):
         LayoutGuardrails(min_font_size_pt=8.9)
+
+    with pytest.raises(ValidationError):
+        LayoutGuardrails(max_body_font_size_pt=12.1)
+
+    with pytest.raises(ValidationError):
+        LayoutGuardrails(min_font_size_pt=11.0, max_body_font_size_pt=10.5)
 
 
 def test_seniority_tier_coverage_validation() -> None:
@@ -172,16 +182,36 @@ def test_freshness_policy_bounds() -> None:
         FreshnessPolicy(max_age_days=0, preferred_age_days=0, daily_draft_limit=3)
 
 
-def test_voice_skill_path_default_and_validation(tmp_path: Path) -> None:
-    omitted_yaml = tmp_path / "target_roles.yaml"
-    omitted_yaml.write_text("target_roles:\n  primary: ['Junior Software Engineer']\n", encoding="utf-8")
+def test_job_preferences_omits_removed_fields(tmp_path: Path) -> None:
+    minimal_yaml = tmp_path / "target_roles.yaml"
+    minimal_yaml.write_text("target_roles:\n  primary: ['Junior Software Engineer']\n", encoding="utf-8")
 
-    prefs = load_job_preferences(omitted_yaml)
-    assert prefs.voice_skill_path == ".agent/skills/application-voice"
+    prefs = load_job_preferences(minimal_yaml)
+    assert prefs.seniority_policy.entry_level.min_must_have_coverage == 0.65
+    assert prefs.seniority_policy.stretch.min_must_have_coverage == 0.95
+    assert prefs.layout_guardrails.min_font_size_pt == 10.0
+    assert prefs.layout_guardrails.max_body_font_size_pt == 12.0
 
-    for invalid_path in ("", "   ", "\t\n"):
-        with pytest.raises(ValidationError):
-            JobPreferences(voice_skill_path=invalid_path)
+
+def test_load_valid_llm_config_example_yaml() -> None:
+    cfg = load_llm_config(CONFIG_DIR / "llm.example.yaml")
+
+    assert isinstance(cfg, LLMConfig)
+    assert cfg.base_url == DEFAULT_OPENCODE_BASE_URL
+    assert cfg.api_key_env == "OPENCODE_API_KEY"
+    assert cfg.scoring_model == "deepseek-v4.1-flash"
+    assert cfg.reasoning_model == "deepseek-v4-pro"
+    assert cfg.max_parse_retries == 2
+    assert cfg.structured_output_method == "json_schema"
+
+
+@pytest.mark.parametrize("bad_model", ["", "   "])
+def test_llm_config_rejects_empty_models(bad_model: str) -> None:
+    with pytest.raises(ValidationError):
+        LLMConfig(scoring_model=bad_model, reasoning_model="deepseek-v4-pro")
+
+    with pytest.raises(ValidationError):
+        LLMConfig(scoring_model="deepseek-v4.1-flash", reasoning_model=bad_model)
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +237,9 @@ def test_application_status_enum_values() -> None:
     expected = {
         "Pending_Scoring",
         "PreFiltered_Out",
+        "Scored_Out",
+        "Queued_For_Drafting",
+        "Expired",
         "Pending_Review",
         "Revising",
         "Ready_to_Submit",

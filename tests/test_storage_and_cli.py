@@ -271,8 +271,11 @@ def test_prioritized_candidates_prefers_7_day_and_future_deadline_over_older_eli
         application_deadline=FIXED_NOW - timedelta(days=1),
     )
 
-    for posting in (fifteen_days, future_deadline, three_days, expired_deadline):
-        repo.insert_job(posting, ApplicationStatus.PENDING_SCORING, created_at=FIXED_NOW)
+    # Insert fallback postings in explicit FIFO order (exp10 queued before age15)
+    repo.insert_job(expired_deadline, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=FIXED_NOW - timedelta(minutes=2))
+    repo.insert_job(fifteen_days, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=FIXED_NOW - timedelta(minutes=1))
+    repo.insert_job(future_deadline, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=FIXED_NOW)
+    repo.insert_job(three_days, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=FIXED_NOW - timedelta(minutes=3))
 
     top_three = repo.list_prioritized_candidates(preferred_age_days=7, limit=3, now=FIXED_NOW)
     assert [job.job_id for job in top_three] == [
@@ -310,10 +313,10 @@ def test_prioritized_candidates_exact_preferred_age_boundary_and_fallback() -> N
         posted_at=FIXED_NOW - timedelta(days=1),
     )
 
-    repo.insert_job(exact_7_days, ApplicationStatus.PENDING_SCORING, created_at=FIXED_NOW)
-    repo.insert_job(eight_days, ApplicationStatus.PENDING_SCORING, created_at=FIXED_NOW)
-    repo.insert_job(twelve_days, ApplicationStatus.PENDING_SCORING, created_at=FIXED_NOW)
-    repo.insert_job(drafted_recent, ApplicationStatus.PENDING_SCORING, created_at=FIXED_NOW)
+    repo.insert_job(exact_7_days, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=FIXED_NOW)
+    repo.insert_job(eight_days, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=FIXED_NOW - timedelta(minutes=2))
+    repo.insert_job(twelve_days, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=FIXED_NOW - timedelta(minutes=1))
+    repo.insert_job(drafted_recent, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=FIXED_NOW)
     repo.update_job("drafted_00000004", cv_pdf_path="/tmp/cv.pdf", updated_at=FIXED_NOW)
 
     # drafted_recent is excluded; exact_7_days stays ahead of 8- and 12-day postings
@@ -335,12 +338,74 @@ def test_prioritized_candidates_exact_preferred_age_boundary_and_fallback() -> N
     assert [j.job_id for j in fallback] == ["age12_0000000003"]
 
 
+def test_prioritized_candidates_fifo_backlog_and_expiration_guard() -> None:
+    repo = JobRepository(":memory:")
+
+    # 3 jobs queued yesterday, 1 queued today (same preferred tier) -> yesterday drains first
+    for idx in range(3):
+        repo.insert_job(
+            _make_posting(job_id=f"yest_{idx}", posted_at=FIXED_NOW - timedelta(days=2)),
+            ApplicationStatus.QUEUED_FOR_DRAFTING,
+            created_at=FIXED_NOW - timedelta(days=1, minutes=10 - idx),
+        )
+    repo.insert_job(
+        _make_posting(job_id="today_0", posted_at=FIXED_NOW - timedelta(hours=2)),
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
+        created_at=FIXED_NOW,
+    )
+    repo.update_job("today_0", fit_score=9.9)
+    for idx in range(3):
+        repo.update_job(f"yest_{idx}", fit_score=7.0)
+
+    # Expired deadline and aged-out queued job + manual aged-out job
+    repo.insert_job(
+        _make_posting(
+            job_id="expired_dl",
+            posted_at=FIXED_NOW - timedelta(days=3),
+            application_deadline=FIXED_NOW - timedelta(hours=1),
+        ),
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
+        created_at=FIXED_NOW - timedelta(days=2),
+    )
+    repo.insert_job(
+        _make_posting(
+            job_id="expired_age",
+            posted_at=FIXED_NOW - timedelta(days=22),
+            application_deadline=None,
+        ),
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
+        created_at=FIXED_NOW - timedelta(days=2),
+    )
+    repo.insert_job(
+        _make_posting(
+            job_id="manual_old",
+            source="manual",
+            posted_at=FIXED_NOW - timedelta(days=30),
+            application_deadline=None,
+        ),
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
+        created_at=FIXED_NOW - timedelta(days=2),
+    )
+
+    assert repo.count_queued_jobs() == 7
+    expired_count = repo.expire_stale_queued_jobs(max_age_days=21, now=FIXED_NOW)
+    assert expired_count == 2
+    assert repo.get_job("expired_dl").status == ApplicationStatus.EXPIRED
+    assert repo.get_job("expired_age").status == ApplicationStatus.EXPIRED
+    assert repo.get_job("manual_old").status == ApplicationStatus.QUEUED_FOR_DRAFTING
+    assert repo.count_queued_jobs() == 5
+
+    # Yesterday's 3 preferred jobs drain FIFO before today's higher-scoring job
+    drained = repo.list_prioritized_candidates(preferred_age_days=7, limit=3, now=FIXED_NOW)
+    assert [j.job_id for j in drained] == ["yest_0", "yest_1", "yest_2"]
+
+
 def test_prioritized_candidates_limit_is_cap_not_quota() -> None:
     repo = JobRepository(":memory:")
     assert repo.list_prioritized_candidates(preferred_age_days=7, limit=3, now=FIXED_NOW) == []
 
     only_one = _make_posting(job_id="only1_0000000001")
-    repo.insert_job(only_one, ApplicationStatus.PENDING_SCORING, created_at=FIXED_NOW)
+    repo.insert_job(only_one, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=FIXED_NOW)
 
     result = repo.list_prioritized_candidates(preferred_age_days=7, limit=3, now=FIXED_NOW)
     assert len(result) == 1
@@ -362,17 +427,43 @@ def test_prioritized_candidates_missing_posted_at_ranks_behind_preferred_tier() 
     )
     repo.insert_job(
         missing_posted_at,
-        ApplicationStatus.PENDING_SCORING,
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
         created_at=FIXED_NOW,
     )
     repo.insert_job(
         preferred_recent,
-        ApplicationStatus.PENDING_SCORING,
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
         created_at=FIXED_NOW - timedelta(days=1),
     )
 
     ordered = repo.list_prioritized_candidates(preferred_age_days=7, limit=3, now=FIXED_NOW)
     assert [j.job_id for j in ordered] == ["recent_posted_002", "missing_posted_01"]
+
+
+def test_profile_update_suggestions_weekly_cache() -> None:
+    repo = JobRepository(":memory:")
+    id1 = repo.add_profile_suggestion(
+        job_id="job1",
+        kind="addition",
+        fact_text="Built Terraform module for GKE cluster",
+        category="skills.infrastructure",
+        created_at=FIXED_NOW,
+    )
+    id2 = repo.add_profile_suggestion(
+        job_id="job2",
+        kind="correction",
+        fact_text="End date at Nordic Cloud Labs was 2025-06, not ongoing",
+        category="experiences",
+        created_at=FIXED_NOW + timedelta(hours=1),
+    )
+
+    unconsumed = repo.list_unconsumed_profile_suggestions()
+    assert [(s.id, s.kind) for s in unconsumed] == [(id1, "addition"), (id2, "correction")]
+
+    marked = repo.mark_profile_suggestions_consumed([id1], consumed_at=FIXED_NOW + timedelta(days=1))
+    assert marked == 1
+    remaining = repo.list_unconsumed_profile_suggestions()
+    assert [s.id for s in remaining] == [id2]
 
 
 # ---------------------------------------------------------------------------
@@ -722,7 +813,8 @@ def test_repository_prioritized_candidates_defaults_and_nonpositive_limit() -> N
 
     repo.insert_job(
         _make_posting(job_id="d_7d12h", title="7.5d", posted_at=now - timedelta(days=7, hours=12)),
-        ApplicationStatus.PENDING_SCORING,
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
+        created_at=now - timedelta(minutes=4),
     )
     repo.insert_job(
         _make_posting(
@@ -731,15 +823,18 @@ def test_repository_prioritized_candidates_defaults_and_nonpositive_limit() -> N
             posted_at=now - timedelta(days=24),
             application_deadline=now + timedelta(days=3),
         ),
-        ApplicationStatus.PENDING_SCORING,
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
+        created_at=now - timedelta(minutes=1),
     )
     repo.insert_job(
         _make_posting(job_id="d_recent_0", title="Recent 0", posted_at=now - timedelta(days=1)),
-        ApplicationStatus.PENDING_SCORING,
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
+        created_at=now - timedelta(minutes=3),
     )
     repo.insert_job(
         _make_posting(job_id="d_recent_1", title="Recent 1", posted_at=now - timedelta(days=2)),
-        ApplicationStatus.PENDING_SCORING,
+        ApplicationStatus.QUEUED_FOR_DRAFTING,
+        created_at=now - timedelta(minutes=2),
     )
 
     default_results = repo.list_prioritized_candidates()

@@ -50,6 +50,18 @@ CREATE TABLE IF NOT EXISTS jobs (
 )
 """
 
+_CREATE_PROFILE_SUGGESTIONS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS profile_update_suggestions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    fact_text TEXT NOT NULL,
+    category TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    consumed_at TEXT
+)
+"""
+
 
 def _to_utc(dt: datetime) -> datetime:
     """Normalize a naive or timezone-aware datetime to UTC."""
@@ -98,6 +110,18 @@ class StoredJob(BaseModel):
     application_deadline: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ProfileUpdateSuggestion(BaseModel):
+    """Weekly cache entry for user-shared profile additions or corrections."""
+
+    id: int
+    job_id: str
+    kind: Literal["addition", "correction"]
+    fact_text: str
+    category: str
+    created_at: datetime
+    consumed_at: datetime | None = None
 
 
 def _row_to_stored_job(row: sqlite3.Row) -> StoredJob:
@@ -171,6 +195,7 @@ class JobRepository:
     def _init_schema(self) -> None:
         with self._connection() as conn:
             conn.execute(_CREATE_JOBS_TABLE_SQL)
+            conn.execute(_CREATE_PROFILE_SUGGESTIONS_TABLE_SQL)
 
     def exists(self, job_id: str) -> bool:
         """Return True if a row with the given job_id already exists."""
@@ -325,7 +350,7 @@ class JobRepository:
         limit: int = 3,
         now: datetime | None = None,
     ) -> list[StoredJob]:
-        """Return un-drafted Pending_Scoring candidates ordered by freshness priority up to limit."""
+        """Return un-drafted Queued_For_Drafting candidates ordered by tier + strict FIFO."""
         if limit <= 0:
             return []
 
@@ -347,8 +372,8 @@ class JobRepository:
             THEN 0
             ELSE 1
           END ASC,
-          COALESCE(posted_at, created_at) DESC,
-          created_at DESC,
+          created_at ASC,
+          COALESCE(fit_score, 0.0) DESC,
           job_id ASC
         LIMIT ?
         """
@@ -356,13 +381,144 @@ class JobRepository:
             rows = conn.execute(
                 sql,
                 (
-                    ApplicationStatus.PENDING_SCORING.value,
+                    ApplicationStatus.QUEUED_FOR_DRAFTING.value,
                     cutoff_str,
                     now_str,
                     limit,
                 ),
             ).fetchall()
             return [_row_to_stored_job(row) for row in rows]
+
+    def expire_stale_queued_jobs(
+        self,
+        max_age_days: int = 21,
+        now: datetime | None = None,
+    ) -> int:
+        """Transition expired non-manual queued jobs to Expired before drafting."""
+        current_time = _to_utc(now) if now is not None else datetime.now(timezone.utc)
+        age_cutoff_str = _format_dt(current_time - timedelta(days=max_age_days))
+        now_str = _format_dt(current_time)
+
+        with self._connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT job_id, application_deadline, posted_at
+                FROM jobs
+                WHERE status = ?
+                  AND source != 'manual'
+                  AND (
+                    (application_deadline IS NOT NULL AND application_deadline <= ?)
+                    OR (
+                      posted_at IS NOT NULL
+                      AND posted_at < ?
+                      AND (application_deadline IS NULL OR application_deadline <= ?)
+                    )
+                  )
+                """,
+                (
+                    ApplicationStatus.QUEUED_FOR_DRAFTING.value,
+                    now_str,
+                    age_cutoff_str,
+                    now_str,
+                ),
+            ).fetchall()
+
+            for row in rows:
+                deadline = row["application_deadline"]
+                reason = (
+                    f"Application deadline passed ({deadline})"
+                    if deadline is not None and deadline <= now_str
+                    else f"Queued posting aged past {max_age_days} days without active deadline"
+                )
+                conn.execute(
+                    """
+                    UPDATE jobs
+                    SET status = ?, rejection_reason = ?, updated_at = ?
+                    WHERE job_id = ?
+                    """,
+                    (
+                        ApplicationStatus.EXPIRED.value,
+                        reason,
+                        now_str,
+                        row["job_id"],
+                    ),
+                )
+            return len(rows)
+
+    def count_queued_jobs(self) -> int:
+        """Return the number of jobs currently waiting in Queued_For_Drafting."""
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM jobs WHERE status = ?",
+                (ApplicationStatus.QUEUED_FOR_DRAFTING.value,),
+            ).fetchone()
+            return int(row["cnt"]) if row is not None else 0
+
+    def add_profile_suggestion(
+        self,
+        job_id: str,
+        kind: Literal["addition", "correction"],
+        fact_text: str,
+        category: str,
+        created_at: datetime | None = None,
+    ) -> int:
+        """Insert a profile addition or correction into the weekly suggestion cache."""
+        if kind not in ("addition", "correction"):
+            raise ValueError(f"Unsupported suggestion kind: {kind!r}")
+        created_dt = _to_utc(created_at) if created_at is not None else datetime.now(timezone.utc)
+        created_str = _format_dt(created_dt)
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO profile_update_suggestions (
+                    job_id, kind, fact_text, category, created_at, consumed_at
+                ) VALUES (?, ?, ?, ?, ?, NULL)
+                """,
+                (job_id, kind, fact_text.strip(), category.strip(), created_str),
+            )
+            return int(cursor.lastrowid)  # type: ignore[arg-type]
+
+    def list_unconsumed_profile_suggestions(self) -> list[ProfileUpdateSuggestion]:
+        """Return unconsumed weekly profile update suggestions in chronological order."""
+        with self._connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, job_id, kind, fact_text, category, created_at, consumed_at
+                FROM profile_update_suggestions
+                WHERE consumed_at IS NULL
+                ORDER BY created_at ASC, id ASC
+                """
+            ).fetchall()
+            return [
+                ProfileUpdateSuggestion(
+                    id=int(row["id"]),
+                    job_id=row["job_id"],
+                    kind=row["kind"],
+                    fact_text=row["fact_text"],
+                    category=row["category"],
+                    created_at=_parse_dt(row["created_at"]),  # type: ignore[arg-type]
+                    consumed_at=_parse_dt(row["consumed_at"]),
+                )
+                for row in rows
+            ]
+
+    def mark_profile_suggestions_consumed(
+        self,
+        suggestion_ids: list[int],
+        consumed_at: datetime | None = None,
+    ) -> int:
+        """Mark the given profile suggestion IDs as consumed."""
+        if not suggestion_ids:
+            return 0
+        consumed_dt = _to_utc(consumed_at) if consumed_at is not None else datetime.now(timezone.utc)
+        consumed_str = _format_dt(consumed_dt)
+        placeholders = ", ".join("?" for _ in suggestion_ids)
+        with self._connection() as conn:
+            cursor = conn.execute(
+                f"UPDATE profile_update_suggestions SET consumed_at = ? WHERE id IN ({placeholders}) AND consumed_at IS NULL",
+                [consumed_str, *suggestion_ids],
+            )
+            return cursor.rowcount
 
     def prune_old_jobs(
         self,

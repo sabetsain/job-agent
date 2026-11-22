@@ -26,6 +26,9 @@ class ApplicationStatus(StrEnum):
 
     PENDING_SCORING = "Pending_Scoring"
     PRE_FILTERED_OUT = "PreFiltered_Out"
+    SCORED_OUT = "Scored_Out"
+    QUEUED_FOR_DRAFTING = "Queued_For_Drafting"
+    EXPIRED = "Expired"
     PENDING_REVIEW = "Pending_Review"
     REVISING = "Revising"
     READY_TO_SUBMIT = "Ready_to_Submit"

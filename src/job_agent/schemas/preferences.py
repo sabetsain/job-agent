@@ -26,8 +26,6 @@ DEFAULT_EXCLUDED_TITLE_KEYWORDS: tuple[str, ...] = (
     "leder",
 )
 
-DEFAULT_VOICE_SKILL_PATH = ".agent/skills/application-voice"
-
 
 class TargetRoles(BaseModel):
     """Primary and adjacent target job titles."""
@@ -120,7 +118,6 @@ class ScoringRubric(BaseModel):
     must_have_skills_weight: float = Field(default=0.35, ge=0.0, le=1.0)
     domain_fit_weight: float = Field(default=0.20, ge=0.0, le=1.0)
     nice_to_have_weight: float = Field(default=0.15, ge=0.0, le=1.0)
-    min_fit_score: float = Field(default=7.5, ge=0.0, le=10.0)
 
 
 class LayoutGuardrails(BaseModel):
@@ -128,12 +125,21 @@ class LayoutGuardrails(BaseModel):
 
     max_cv_pages: int = Field(default=1, ge=1)
     max_cover_letter_pages: int = Field(default=1, ge=1)
-    min_font_size_pt: float = Field(default=10.0, ge=9.0)
+    min_font_size_pt: float = Field(default=10.0, ge=9.0, le=12.0)
+    max_body_font_size_pt: float = Field(default=12.0, ge=9.0, le=12.0)
     preserve_whitespace_and_margins: bool = True
+
+    @model_validator(mode="after")
+    def _validate_font_bounds(self) -> LayoutGuardrails:
+        if self.min_font_size_pt > self.max_body_font_size_pt:
+            raise ValueError(
+                "min_font_size_pt must be less than or equal to max_body_font_size_pt"
+            )
+        return self
 
 
 class JobPreferences(BaseModel):
-    """Target roles, filtering policies, scoring rubric, layout guardrails, and voice skill."""
+    """Target roles, filtering policies, scoring rubric, and layout guardrails."""
 
     target_roles: TargetRoles = Field(default_factory=TargetRoles)
     locations: LocationsConfig = Field(default_factory=LocationsConfig)
@@ -143,7 +149,6 @@ class JobPreferences(BaseModel):
     dealbreakers: Dealbreakers = Field(default_factory=Dealbreakers)
     scoring_rubric: ScoringRubric = Field(default_factory=ScoringRubric)
     layout_guardrails: LayoutGuardrails = Field(default_factory=LayoutGuardrails)
-    voice_skill_path: NonEmptyStr = DEFAULT_VOICE_SKILL_PATH
 
 
 def load_job_preferences(path: Path | str) -> JobPreferences:
