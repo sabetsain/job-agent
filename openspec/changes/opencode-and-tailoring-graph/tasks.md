@@ -1,7 +1,7 @@
 ## 1. Environment, Config & Project Hygiene
 
 - [x] 1.1 Pin Python version in `.python-version`, add runtime dependencies (`langchain-openai`, `langgraph`, `langgraph-checkpoint-sqlite`, `typst`, `pypdf`) to `pyproject.toml`, update `uv.lock`, and configure `pytest` markers (`eval`) plus expanded `[tool.mutmut]` target paths (`scoring/`, `auditing/`, `storage/`, `schemas/`).
-- [x] 1.2 Add `.env.example` documenting `OPENCODE_API_KEY` (and optional per-tier API key overrides), ensure `.gitignore` covers `.env*` and compiled artifacts, and add `.geminiignore` shielding `.env*` and local SQLite DBs from AI coding tools.
+- [x] 1.2 Add `.env.example` documenting `OPENCODE_API_KEY` (and optional per-tier API key overrides), ensure `.gitignore` covers `.env*` and compiled artifacts, and add `.antigravityignore` shielding `.env*` and local SQLite DBs from AI coding tools.
 - [x] 1.3 Update `openspec/config.yaml` (LaTeX → Typst via `typst-py`, `/inference/go/openai` → `https://opencode.ai/zen/go/v1`, free scoring/classification model + cheap paid reasoning model, dedicated system prompts replacing `voice_skill_path`).
 - [x] 1.4 Add `config/llm.example.yaml` and local `config/llm.yaml` template for dual-tier OpenCode Go configuration (`scoring_model` + `reasoning_model`), and update `config/target_roles.yaml` and `config/target_roles.example.yaml` (remove `voice_skill_path` and flat `min_fit_score`, add `max_body_font_size_pt: 12.0`).
 

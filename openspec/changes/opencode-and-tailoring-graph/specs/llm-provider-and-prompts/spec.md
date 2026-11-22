@@ -8,7 +8,7 @@ The system SHALL load non-secret LLM provider settings from a git-tracked YAML f
 - `reasoning_model` (cheap paid model used for planning, writing, auditing, and ideation),
 - optional per-tier `scoring_base_url` / `scoring_api_key_env` overrides (defaulting to the shared OpenCode Go config),
 - optional `reasoning_effort`, `temperature`, `timeout_seconds`, `max_parse_retries`, and `structured_output_method`.
-API keys MUST be read strictly from environment variables and MUST never be stored in YAML config files. The project SHALL also include `.geminiignore` (alongside `.gitignore` and `.env.example`) shielding `.env`, `.env.*`, and local databases from AI coding tools.
+API keys MUST be read strictly from environment variables and MUST never be stored in YAML config files. The project SHALL also include `.antigravityignore` (alongside `.gitignore` and `.env.example`) shielding `.env`, `.env.*`, and local databases from AI coding tools.
 
 #### Scenario: Construct dual-tier ChatOpenAI clients from valid config and env
 - **WHEN** `config/llm.yaml` specifies `scoring_model` (free tier) and `reasoning_model` (paid tier) and `OPENCODE_API_KEY` is set in the environment
