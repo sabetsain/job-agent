@@ -91,12 +91,10 @@ scoring_rubric:
   must_have_skills_weight: 0.35
   domain_fit_weight: 0.20
   nice_to_have_weight: 0.15
-  min_fit_score: 7.5
 
 layout_guardrails:
   max_cv_pages: 1
   max_cover_letter_pages: 1
   min_font_size_pt: 10.0
+  max_body_font_size_pt: 12.0
   preserve_whitespace_and_margins: true
-
-voice_skill_path: ".agent/skills/application-voice"

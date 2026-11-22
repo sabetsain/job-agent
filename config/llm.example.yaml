@@ -1,0 +1,20 @@
+base_url: "https://opencode.ai/zen/go/v1"
+api_key_env: "OPENCODE_API_KEY"
+
+# Free model for high-volume Stage 1 scoring & thread intent classification
+scoring_model: "deepseek-v4.1-flash"
+
+# Cheap paid reasoning model for Planner, Writer, LLM Auditor, and Ideation
+reasoning_model: "deepseek-v4-pro"
+
+# Optional per-tier overrides if scoring uses a separate provider/endpoint
+# scoring_base_url: null
+# scoring_api_key_env: null
+
+# Optional reasoning effort ("low" | "medium" | "high")
+# reasoning_effort: "medium"
+
+temperature: 0.2
+timeout_seconds: 60.0
+max_parse_retries: 2
+structured_output_method: "json_schema"

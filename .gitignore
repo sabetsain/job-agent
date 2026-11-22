@@ -6,9 +6,13 @@ __pycache__/
 .mutmut-cache/
 mutants/
 data/*.db
+data/drafts/
 *.egg-info/
 dist/
 build/
 config/*.yaml
 !config/*.example.yaml
+.env
+.env.*
+!.env.example
 .worktrees/
