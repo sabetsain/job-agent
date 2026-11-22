@@ -1,0 +1,51 @@
+identity:
+  full_name: "Alex Testsson"
+  email: "alex@example.com"
+  location: "Copenhagen, Denmark"
+
+summary_seed: >
+  Recent Computer Science graduate from Copenhagen with production Python, FastAPI, SQL,
+  Docker, GitHub Actions, and Pulumi infrastructure experience on GCP.
+
+experiences:
+  - company: "Nordic DevTools ApS"
+    title: "Student Software Engineer"
+    start_date: "2024-03"
+    end_date: "2026-05"
+    location: "Copenhagen, Denmark"
+    bullets:
+      - label: "Backend API"
+        text: "Built FastAPI services backed by PostgreSQL and SQLite with automated GitHub Actions CI/CD."
+        metrics: ["~400 internal users"]
+        skills: ["Python", "FastAPI", "PostgreSQL", "SQL", "GitHub Actions", "Git"]
+      - label: "Cloud IaC"
+        text: "Provisioned containerized workloads on GCP Cloud Run using Pulumi and Docker."
+        metrics: []
+        skills: ["GCP", "Pulumi", "Docker"]
+
+projects:
+  - name: "OpenTelemetry Log Analyzer"
+    description: "CLI and Grafana dashboard pipeline for microservice traces."
+    bullets:
+      - "Parsed JSON logs in Python and exported metrics to Grafana."
+    skills: ["Python", "Grafana", "Docker"]
+
+education:
+  - institution: "University of Copenhagen"
+    degree: "BSc in Computer Science"
+    start_date: "2023-09"
+    end_date: "2026-06"
+    location: "Copenhagen, Denmark"
+
+languages:
+  - language: "en"
+    proficiency: "Fluent"
+  - language: "da"
+    proficiency: "Fluent"
+
+skills:
+  languages: ["Python", "SQL", "TypeScript"]
+  frameworks: ["FastAPI"]
+  infrastructure: ["GCP", "Pulumi", "Docker", "GitHub Actions"]
+  databases: ["PostgreSQL", "SQLite"]
+  tools: ["Git", "Grafana"]

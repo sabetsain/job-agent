@@ -37,6 +37,7 @@ job-agent = "job_agent.cli:app"
 packages = ["src/job_agent"]
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 testpaths = ["tests"]
 markers = [
     "eval: live LLM evaluation tests requiring OPENCODE_API_KEY",

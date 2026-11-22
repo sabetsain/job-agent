@@ -21,9 +21,9 @@
 
 ## 4. Stage 1 Fit Scorer & Curated Scoring Evals Suite
 
-- [ ] 4.1 Implement `src/job_agent/scoring/models.py` and `src/job_agent/scoring/scorer.py`: LangChain structured-output `ScoringEvidence` extraction via `scoring_model`, deterministic Python rejection of `is_technical == False` and `senior_plus` / `inferred_min_years > max_years_experience`, Option B transferable credit (`1.0` for `entry_level` @ ≥65%, `0.0` for `stretch` @ ≥95%), weighted `fit_score` computation, `missing_posted_at` flagging, and batch runner evaluating all `Pending_Scoring` rows into `Queued_For_Drafting` or `Scored_Out`.
-- [ ] 4.2 Add thorough unit tests for deterministic scoring boundaries in `tests/test_scoring.py`.
-- [ ] 4.3 Create the curated scoring evals suite under `tests/evals/` (`test_profile.yaml`, structured test job listings covering entry-level direct, entry-level transferable across diverse stacks, entry-level miss, stretch transferable-only reject, stretch direct pass, hidden senior+ reject, non-technical reject, Danish posting, and missing `posted_at`) runnable offline by default and live against OpenCode Go via `pytest -m eval`.
+- [x] 4.1 Implement `src/job_agent/scoring/models.py` and `src/job_agent/scoring/scorer.py`: LangChain structured-output `ScoringEvidence` extraction via `scoring_model`, deterministic Python rejection of `is_technical == False` and `senior_plus` / `inferred_min_years > max_years_experience`, Option B transferable credit (`1.0` for `entry_level` @ ≥65%, `0.0` for `stretch` @ ≥95%), weighted `fit_score` computation, `missing_posted_at` flagging, and batch runner evaluating all `Pending_Scoring` rows into `Queued_For_Drafting` or `Scored_Out`.
+- [x] 4.2 Add thorough unit tests for deterministic scoring boundaries in `tests/test_scoring.py`.
+- [x] 4.3 Create the curated scoring evals suite under `tests/evals/` (`test_profile.yaml`, structured test job listings covering entry-level direct, entry-level transferable across diverse stacks, entry-level miss, stretch transferable-only reject, stretch direct pass, hidden senior+ reject, non-technical reject, Danish posting, and missing `posted_at`) runnable offline by default and live against OpenCode Go via `pytest -m eval`.
 
 ## 5. Typst Document Rendering (`basic-resume` CV + Custom Matching Cover Letter)
 
