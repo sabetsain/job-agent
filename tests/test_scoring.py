@@ -15,6 +15,9 @@ from job_agent.schemas import (
     JobPosting,
     JobPreferences,
     MasterProfile,
+    ScoringRubric,
+    SeniorityPolicy,
+    SeniorityTier,
     WorkMode,
     load_job_preferences,
     load_master_profile,
@@ -25,6 +28,7 @@ from job_agent.scoring import (
     evaluate_scoring_evidence,
     score_pending_jobs,
 )
+from job_agent.scoring.scorer import build_scorer_user_prompt
 from job_agent.storage import JobRepository
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -302,3 +306,131 @@ def test_score_pending_jobs_evaluates_all_rows_without_daily_cap() -> None:
     assert stored_0.status == ApplicationStatus.QUEUED_FOR_DRAFTING
     assert stored_0.fit_breakdown_json is not None
     assert '"missing_posted_at":true' in stored_0.fit_breakdown_json.replace(" ", "")
+
+
+def test_scoring_boundaries_zero_weights_empty_must_haves_and_exact_thresholds() -> None:
+    prefs = _prefs()
+    posting = _posting()
+
+    # Zero rubric weights -> fit_score == 0.0 and fails cleanly
+    zero_weight_prefs = prefs.model_copy(
+        update={
+            "scoring_rubric": ScoringRubric(
+                role_seniority_weight=0.0,
+                must_have_skills_weight=0.0,
+                domain_fit_weight=0.0,
+                nice_to_have_weight=0.0,
+            )
+        }
+    )
+    zero_score = evaluate_scoring_evidence(posting, _evidence(), zero_weight_prefs)
+    assert zero_score.fit_score == 0.0
+    assert zero_score.passed is False
+
+    # Technical role with empty must_have_skills falls back to match/missing lists
+    fallback_lists = evaluate_scoring_evidence(
+        posting,
+        _evidence(
+            must_have_skills=[],
+            direct_matches=["Python"],
+            transferable_matches=[],
+            missing_must_haves=["SQL"],
+            role_seniority_score=8.0,
+            must_have_skills_score=8.0,
+            domain_fit_score=8.0,
+            nice_to_have_score=8.0,
+        ),
+        prefs,
+    )
+    assert fallback_lists.must_have_coverage == 0.5
+    assert fallback_lists.passed is False
+
+    # Empty must_have_skills and empty match lists -> coverage 1.0
+    no_reqs = evaluate_scoring_evidence(
+        posting,
+        _evidence(
+            must_have_skills=[],
+            direct_matches=[],
+            transferable_matches=[],
+            missing_must_haves=[],
+            role_seniority_score=6.5,
+            must_have_skills_score=6.5,
+            domain_fit_score=6.5,
+            nice_to_have_score=6.5,
+        ),
+        prefs,
+    )
+    assert no_reqs.must_have_coverage == 1.0
+    assert no_reqs.fit_score == 6.5
+    assert no_reqs.passed is True
+
+    # Exact coverage boundary: 0.50 with entry_level threshold 0.50 passes
+    half_prefs = prefs.model_copy(
+        update={
+            "seniority_policy": SeniorityPolicy(
+                entry_level=SeniorityTier(max_years=1, min_must_have_coverage=0.50),
+                stretch=SeniorityTier(max_years=2, min_must_have_coverage=0.95),
+            )
+        }
+    )
+    exact_cov = evaluate_scoring_evidence(
+        posting,
+        _evidence(
+            inferred_min_years=1,  # == entry_level.max_years -> stays entry_level
+            must_have_skills=["Python", "SQL"],
+            direct_matches=["Python"],
+            missing_must_haves=["SQL"],
+            role_seniority_score=5.0,
+            must_have_skills_score=5.0,
+            domain_fit_score=5.0,
+            nice_to_have_score=5.0,
+        ),
+        half_prefs,
+    )
+    assert exact_cov.effective_tier == "entry_level"
+    assert exact_cov.must_have_coverage == 0.5
+    assert exact_cov.passed is True
+
+    # Hidden senior_plus with inferred_min_years=None uses seniority_signals or fallback text
+    senior_no_years = evaluate_scoring_evidence(
+        posting,
+        _evidence(
+            inferred_min_years=None,
+            seniority_tier="senior_plus",
+            seniority_signals=["multi-team ownership"],
+        ),
+        prefs,
+    )
+    assert senior_no_years.passed is False
+    assert "multi-team ownership" in (senior_no_years.rejection_reason or "")
+
+    senior_no_signals = evaluate_scoring_evidence(
+        posting,
+        _evidence(
+            inferred_min_years=None,
+            seniority_tier="senior_plus",
+            seniority_signals=[],
+        ),
+        prefs,
+    )
+    assert "senior scope" in (senior_no_signals.rejection_reason or "")
+
+
+def test_build_scorer_user_prompt_includes_all_contract_fields() -> None:
+    posting = _posting(
+        posted_at=FIXED_NOW - timedelta(days=1),
+        application_deadline=FIXED_NOW + timedelta(days=10),
+    )
+    raw = build_scorer_user_prompt(posting, _profile(), _prefs())
+    payload = json.loads(raw)
+
+    assert payload["job"]["job_id"] == posting.job_id
+    assert payload["job"]["title"] == posting.title
+    assert payload["job"]["posted_at"] is not None
+    assert payload["job"]["application_deadline"] is not None
+    assert payload["seniority_policy"]["max_years_experience"] == 2
+    assert payload["seniority_policy"]["entry_level_max_years"] == 1
+    assert payload["seniority_policy"]["stretch_max_years"] == 2
+    assert "primary" in payload["target_roles"]
+    assert "must_have" in payload["preferred_skills"]
+    assert "identity" in payload["master_profile"]

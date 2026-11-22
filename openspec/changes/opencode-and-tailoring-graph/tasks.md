@@ -42,6 +42,6 @@
 
 ## 7. Local CLI Harness & Final Verification
 
-- [ ] 7.1 Extend `src/job_agent/cli.py` with `job-agent score`, `job-agent draft`, `job-agent queue`, and the interactive `job-agent review <job_id>` terminal harness (displaying brief, fit breakdown, major gaps, `missing_posted_at` warning, compiled PDF paths, `"Workshopping now..."` status messages, free-form ideation/one-shot re-iterate input, and `/approve` / `/dismiss` commands) and add CLI tests.
-- [ ] 7.2 Run full `.venv/bin/pytest -v` test suite (including offline scoring evals) and `.venv/bin/mutmut run` across `schemas/`, `filters/`, `sources/normalize.py`, `storage/`, `scoring/`, and `auditing/deterministic.py`, killing any behavioral survivors.
-- [ ] 7.3 Validate OpenSpec artifacts (`openspec validate opencode-and-tailoring-graph --strict`) and verify zero drift with `docs/INTENT.md`.
+- [x] 7.1 Extend `src/job_agent/cli.py` with `job-agent score`, `job-agent draft`, `job-agent queue`, and the interactive `job-agent review <job_id>` terminal harness (displaying brief, fit breakdown, major gaps, `missing_posted_at` warning, compiled PDF paths, `"Workshopping now..."` status messages, free-form ideation/one-shot re-iterate input, and `/approve` / `/dismiss` commands) and add CLI tests.
+- [x] 7.2 Run full `.venv/bin/pytest -v` test suite (including offline scoring evals) and `.venv/bin/mutmut run` across `schemas/`, `filters/`, `sources/normalize.py`, `storage/`, `scoring/`, and `auditing/deterministic.py`, killing any behavioral survivors.
+- [x] 7.3 Validate OpenSpec artifacts (`openspec validate opencode-and-tailoring-graph --strict`) and verify zero drift with `docs/INTENT.md`.

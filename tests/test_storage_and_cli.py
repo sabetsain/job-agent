@@ -467,6 +467,9 @@ def test_prioritized_candidates_missing_posted_at_ranks_behind_preferred_tier() 
 
 def test_profile_update_suggestions_weekly_cache() -> None:
     repo = JobRepository(":memory:")
+    assert repo.count_queued_jobs() == 0
+    assert repo.mark_profile_suggestions_consumed([]) == 0
+
     id1 = repo.add_profile_suggestion(
         job_id="job1",
         kind="addition",
@@ -487,6 +490,7 @@ def test_profile_update_suggestions_weekly_cache() -> None:
 
     marked = repo.mark_profile_suggestions_consumed([id1], consumed_at=FIXED_NOW + timedelta(days=1))
     assert marked == 1
+    assert repo.mark_profile_suggestions_consumed([id1], consumed_at=FIXED_NOW + timedelta(days=1)) == 0
     remaining = repo.list_unconsumed_profile_suggestions()
     assert [s.id for s in remaining] == [id2]
 
