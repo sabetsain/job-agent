@@ -6,10 +6,10 @@
 
 ## 2. Domain Schemas & Config Loaders
 
-- [ ] 2.1 Implement Pydantic v2 `MasterProfile` schema and YAML loader in `src/job_agent/schemas/profile.py`
-- [ ] 2.2 Implement Pydantic v2 `JobPreferences` schema (including `SeniorityPolicy` excluding `Architect` from the blocklist and validating entry-level vs. stretch coverage, `FreshnessPolicy` with `max_age_days=21`, `preferred_age_days=7`, `daily_draft_limit=3` upper cap, location/work-mode rules, empty-default dealbreakers, scoring rubric, layout guardrails with `min_font_size_pt >= 9.0`, and required non-empty `voice_skill_path` defaulting to `.agent/skills/application-voice`) in `src/job_agent/schemas/preferences.py`
-- [ ] 2.3 Implement Pydantic v2 `SourcesConfig`, `RawJob`, and `JobPosting` (with `Literal["da", "en"]` language, optional `posted_at` & `application_deadline`, and `ApplicationStatus` enum) schemas in `src/job_agent/schemas/jobs.py`
-- [ ] 2.4 Add intent-rooted unit tests in `tests/test_schemas.py` covering valid YAML loading, `min_font_size_pt < 9.0` rejection, seniority tier coverage validation, `FreshnessPolicy` bounds, required `voice_skill_path`, `application_deadline`, and invalid language rejection
+- [x] 2.1 Implement Pydantic v2 `MasterProfile` schema and YAML loader in `src/job_agent/schemas/profile.py`
+- [x] 2.2 Implement Pydantic v2 `JobPreferences` schema (including `SeniorityPolicy` excluding `Architect` from the blocklist and validating entry-level vs. stretch coverage, `FreshnessPolicy` with `max_age_days=21`, `preferred_age_days=7`, `daily_draft_limit=3` upper cap, location/work-mode rules, empty-default dealbreakers, scoring rubric, layout guardrails with `min_font_size_pt >= 9.0`, and required non-empty `voice_skill_path` defaulting to `.agent/skills/application-voice`) in `src/job_agent/schemas/preferences.py`
+- [x] 2.3 Implement Pydantic v2 `SourcesConfig`, `RawJob`, and `JobPosting` (with `Literal["da", "en"]` language, optional `posted_at` & `application_deadline`, and `ApplicationStatus` enum) schemas in `src/job_agent/schemas/jobs.py`
+- [x] 2.4 Add intent-rooted unit tests in `tests/test_schemas.py` covering valid YAML loading, `min_font_size_pt < 9.0` rejection, seniority tier coverage validation, `FreshnessPolicy` bounds, required `voice_skill_path`, `application_deadline`, and invalid language rejection
 
 ## 3. Job Discovery & Ingestion Adapters
 
