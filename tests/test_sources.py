@@ -91,6 +91,11 @@ def test_generate_job_id_fallback_when_url_missing() -> None:
     assert id1 == id2
     assert id1 != id_other_title
 
+    import hashlib
+
+    expected = hashlib.sha256(b"manual\x1fnordic cloud labs\x1fjunior software engineer").hexdigest()[:16]
+    assert id1 == expected
+
 
 def test_detect_language_danish_deterministic_even_with_english_tech_terms() -> None:
     title = "Softwareudvikler til vores team i København"

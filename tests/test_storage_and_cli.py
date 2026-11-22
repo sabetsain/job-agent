@@ -714,3 +714,98 @@ def test_cli_add_url_succeeds_for_clean_html_and_list_filters_by_language(tmp_pa
     da_list = runner.invoke(app, ["list", "--language", "da", "--db", str(db_path)])
     assert da_list.exit_code == 0
     assert "No jobs found." in da_list.stdout
+
+
+def test_repository_prioritized_candidates_defaults_and_nonpositive_limit() -> None:
+    repo = JobRepository(":memory:")
+    now = datetime.now(timezone.utc)
+
+    repo.insert_job(
+        _make_posting(job_id="d_7d12h", title="7.5d", posted_at=now - timedelta(days=7, hours=12)),
+        ApplicationStatus.PENDING_SCORING,
+    )
+    repo.insert_job(
+        _make_posting(
+            job_id="d_deadline",
+            title="Deadline",
+            posted_at=now - timedelta(days=24),
+            application_deadline=now + timedelta(days=3),
+        ),
+        ApplicationStatus.PENDING_SCORING,
+    )
+    repo.insert_job(
+        _make_posting(job_id="d_recent_0", title="Recent 0", posted_at=now - timedelta(days=1)),
+        ApplicationStatus.PENDING_SCORING,
+    )
+    repo.insert_job(
+        _make_posting(job_id="d_recent_1", title="Recent 1", posted_at=now - timedelta(days=2)),
+        ApplicationStatus.PENDING_SCORING,
+    )
+
+    default_results = repo.list_prioritized_candidates()
+    assert len(default_results) == 3
+    assert [j.job_id for j in default_results] == ["d_recent_0", "d_recent_1", "d_deadline"]
+    assert repo.list_prioritized_candidates(limit=0, now=now) == []
+    repo.close()
+    assert repo._memory_conn is None
+
+
+def test_repository_prune_old_jobs_defaults() -> None:
+    repo = JobRepository(":memory:")
+    now = datetime.now(timezone.utc)
+
+    repo.insert_job(
+        _make_posting(job_id="old_180d12h", title="Old"),
+        ApplicationStatus.REJECTED,
+        created_at=now - timedelta(days=180, hours=12),
+    )
+    repo.insert_job(
+        _make_posting(job_id="fresh_179d", title="Keep"),
+        ApplicationStatus.REJECTED,
+        created_at=now - timedelta(days=179),
+    )
+
+    pruned = repo.prune_old_jobs()
+    assert pruned == 1
+    assert repo.get_job("old_180d12h") is None
+    assert repo.get_job("fresh_179d") is not None
+    repo.close()
+
+
+def test_repository_update_job_lifecycle_fields_and_missing_id() -> None:
+    repo = JobRepository(":memory:")
+    now = datetime(2026, 11, 22, 12, 0, tzinfo=timezone.utc)
+    posting = _make_posting(job_id="upd1", title="Junior Developer", posted_at=now)
+    repo.insert_job(posting, ApplicationStatus.PENDING_SCORING, created_at=now)
+
+    assert repo.update_job("upd1") is False
+    assert repo.update_job("nonexistent", status=ApplicationStatus.APPLIED) is False
+
+    updated = repo.update_job(
+        "upd1",
+        status=ApplicationStatus.INTERVIEWING,
+        rejection_reason=None,
+        fit_score=8.7,
+        fit_breakdown_json='{"total": 8.7}',
+        cv_pdf_path="output/cv.pdf",
+        cover_letter_pdf_path="output/cl.pdf",
+        slack_thread_ts="1732270000.1234",
+        gmail_thread_id="gmail-abc",
+        langgraph_thread_id="lg-xyz",
+        updated_at=now + timedelta(hours=2),
+    )
+    assert updated is True
+
+    stored = repo.get_job("upd1")
+    assert stored is not None
+    assert stored.status == ApplicationStatus.INTERVIEWING
+    assert stored.rejection_reason is None
+    assert stored.fit_score == 8.7
+    assert stored.fit_breakdown_json == '{"total": 8.7}'
+    assert stored.cv_pdf_path == "output/cv.pdf"
+    assert stored.cover_letter_pdf_path == "output/cl.pdf"
+    assert stored.slack_thread_ts == "1732270000.1234"
+    assert stored.gmail_thread_id == "gmail-abc"
+    assert stored.langgraph_thread_id == "lg-xyz"
+    assert stored.updated_at == now + timedelta(hours=2)
+    repo.close()

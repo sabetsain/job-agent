@@ -35,4 +35,4 @@
 - [x] 5.2 Wire idempotent `job_id`-skip + pre-filter + stale-discard + persistence + 6-month cleanup pipeline in `src/job_agent/pipeline.py`
 - [x] 5.3 Implement CLI commands in `src/job_agent/cli.py`: `job-agent ingest`, `job-agent add` (Manual Drop with loud error reporting & non-zero exit), and `job-agent list`
 - [x] 5.4 Add intent-rooted integration tests in `tests/test_storage_and_cli.py` verifying idempotent re-ingestion skips, stale postings not stored, `Pending_Scoring` vs. `PreFiltered_Out` persistence, preferred-tier priority ordering & cap behavior (`< 3` roles), 6-month retention cleanup preserving `Interviewing`, Manual Drop success & loud CLI failure exit codes, and CLI output
-- [ ] 5.5 Run `mutmut` mutation testing against core modules (`schemas/`, `filters/`, `sources/normalize.py`, `storage/`) and strengthen intent-rooted tests until behavioral mutants on all spec boundaries are killed
+- [x] 5.5 Run `mutmut` mutation testing against core modules (`schemas/`, `filters/`, `sources/normalize.py`, `storage/`) and strengthen intent-rooted tests until behavioral mutants on all spec boundaries are killed

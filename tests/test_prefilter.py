@@ -415,3 +415,16 @@ def test_dealbreakers_reject_excluded_industry_contract_and_red_flags() -> None:
     assert res_flag.passed is False
     assert res_flag.discard_without_storing is False
     assert res_flag.reason is not None and "unpaid" in res_flag.reason
+
+
+def test_freshness_defaults_to_current_utc_when_now_omitted() -> None:
+    prefs = _default_prefs()
+    now = datetime.now(timezone.utc)
+
+    fresh_job = _make_job(posted_at=now - timedelta(days=2))
+    stale_job = _make_job(posted_at=now - timedelta(days=25))
+
+    assert evaluate_prefilter(fresh_job, prefs).passed is True
+    stale_res = evaluate_prefilter(stale_job, prefs)
+    assert stale_res.passed is False
+    assert stale_res.discard_without_storing is True

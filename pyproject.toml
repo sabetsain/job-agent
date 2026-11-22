@@ -35,10 +35,12 @@ packages = ["src/job_agent"]
 testpaths = ["tests"]
 
 [tool.mutmut]
-source_paths = [
-    "src/job_agent/schemas/",
-    "src/job_agent/filters/",
+also_copy = ["config/"]
+source_paths = ["src/job_agent/"]
+only_mutate = [
+    "src/job_agent/schemas/*.py",
+    "src/job_agent/filters/*.py",
     "src/job_agent/sources/normalize.py",
-    "src/job_agent/storage/",
+    "src/job_agent/storage/*.py",
 ]
 pytest_add_cli_args_test_selection = ["tests/"]
