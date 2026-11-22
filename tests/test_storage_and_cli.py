@@ -2,17 +2,38 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, TypeVar
 
 import httpx
 import pytest
 import respx
+from pydantic import BaseModel
 from typer.testing import CliRunner
 
+from job_agent.auditing import AuditResult
 from job_agent.cli import app
+from job_agent.graph import (
+    DraftDocuments,
+    IdeationResponse,
+    TailoringPlan,
+    ThreadIntentDecision,
+)
+from job_agent.llm.client import ModelTier
 from job_agent.pipeline import run_ingestion, submit_manual_job
+from job_agent.rendering.models import (
+    CVBullet,
+    CVEducation,
+    CVExperience,
+    CVProject,
+    CVSkillCategory,
+    TailoredCoverLetter,
+    TailoredCV,
+)
 from job_agent.schemas import (
     ApplicationStatus,
     JobPosting,
@@ -21,13 +42,17 @@ from job_agent.schemas import (
     WorkMode,
     load_job_preferences,
 )
+from job_agent.scoring.models import FitDecision, ScoringEvidence
 from job_agent.sources.manual import ManualDropError
 from job_agent.sources.runner import IngestionFetchResult, SourceFetchError
 from job_agent.storage import JobRepository, StoredJob
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_PREFS_PATH = REPO_ROOT / "config" / "target_roles.example.yaml"
+EXAMPLE_PROFILE_PATH = REPO_ROOT / "config" / "master_profile.example.yaml"
+EXAMPLE_LLM_CONFIG_PATH = REPO_ROOT / "config" / "llm.example.yaml"
 FIXED_NOW = datetime(2026, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+T = TypeVar("T", bound=BaseModel)
 
 
 def _make_posting(**overrides: object) -> JobPosting:
@@ -904,3 +929,707 @@ def test_repository_update_job_lifecycle_fields_and_missing_id() -> None:
     assert stored.langgraph_thread_id == "lg-xyz"
     assert stored.updated_at == now + timedelta(hours=2)
     repo.close()
+
+
+# ---------------------------------------------------------------------------
+# Stage 1 & Stage 2 CLI harness tests (score, queue, draft, review)
+# ---------------------------------------------------------------------------
+
+
+class _FakeCliLLMClient:
+    """Deterministic fake StructuredLLMClient for CLI score/draft/review tests."""
+
+    def __init__(self, handlers: dict[type[BaseModel], Callable[[ModelTier, str, str], BaseModel]]) -> None:
+        self._handlers = handlers
+        self.calls: list[dict[str, Any]] = []
+
+    def invoke_structured(
+        self,
+        tier: ModelTier,
+        system_prompt: str,
+        user_prompt: str,
+        schema: type[T],
+    ) -> T:
+        self.calls.append(
+            {
+                "tier": tier,
+                "schema": schema.__name__,
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+            }
+        )
+        result = self._handlers[schema](tier, system_prompt, user_prompt)
+        return result  # type: ignore[return-value]
+
+
+def _grounded_example_cv(*, summary_note: str = "") -> TailoredCV:
+    """Build a TailoredCV strictly grounded in config/master_profile.example.yaml."""
+    extra = f" {summary_note}" if summary_note else ""
+    return TailoredCV(
+        language="en",
+        full_name="Example Candidate",
+        email="candidate@example.com",
+        phone="+45 12 34 56 78",
+        location="Copenhagen, Denmark",
+        linkedin_url="https://linkedin.com/in/example",
+        github_url="https://github.com/example",
+        website_url="https://example.dev",
+        profile_summary=(
+            "Software engineer based in Copenhagen building Python FastAPI microservices, "
+            f"automated data pipelines, and Pulumi GCP deployments.{extra}"
+        ),
+        section_order=["experience", "projects", "education", "skills"],
+        experiences=[
+            CVExperience(
+                company="Nordic Cloud Labs",
+                title="Junior Software Engineer",
+                start_date="2024-02",
+                end_date="present",
+                location="Copenhagen, Denmark",
+                bullets=[
+                    CVBullet(
+                        lead="Backend APIs",
+                        text="Built FastAPI microservices handling ~1,200 daily requests with 99.9% uptime.",
+                    ),
+                    CVBullet(
+                        lead="Infrastructure Automation",
+                        text="Provisioned GCP Cloud Run services and Cloud SQL instances using Pulumi IaC.",
+                    ),
+                ],
+            )
+        ],
+        projects=[
+            CVProject(
+                name="OpenTelemetry Log Router",
+                url="https://github.com/example/otel-router",
+                bullets=[
+                    CVBullet(
+                        lead="Log Filtering",
+                        text="Reduced log ingestion overhead by 35% via deterministic pre-filtering.",
+                    )
+                ],
+            )
+        ],
+        education=[
+            CVEducation(
+                institution="University of Copenhagen",
+                degree="B.Sc. in Computer Science",
+                start_date="2020-09",
+                end_date="2023-06",
+                location="Copenhagen, Denmark",
+                highlights=["Thesis on distributed systems consensus protocols."],
+            )
+        ],
+        skills=[
+            CVSkillCategory(category="Languages", items=["Python", "SQL", "TypeScript"]),
+            CVSkillCategory(
+                category="Backend & Cloud",
+                items=["FastAPI", "Pulumi", "GCP", "Docker", "PostgreSQL"],
+            ),
+        ],
+        languages_spoken=["English (Native / Fluent)", "Danish (Fluent)"],
+    )
+
+
+def _grounded_example_cover_letter() -> TailoredCoverLetter:
+    """Build a TailoredCoverLetter strictly grounded in config/master_profile.example.yaml."""
+    return TailoredCoverLetter(
+        language="en",
+        full_name="Example Candidate",
+        email="candidate@example.com",
+        phone="+45 12 34 56 78",
+        location="Copenhagen, Denmark",
+        linkedin_url="https://linkedin.com/in/example",
+        recipient_company="CloudNord ApS",
+        role_title="Junior Backend Engineer",
+        date_str="November 22, 2026",
+        greeting="Dear Hiring Team at CloudNord ApS,",
+        paragraphs=[
+            (
+                "Designing reliable backend APIs in Python and FastAPI that validate payloads before "
+                "hitting production storage matches the engineering work I enjoy most. Your Junior "
+                "Backend Engineer opening at CloudNord ApS stood out because the team runs cloud-native "
+                "Python services and PostgreSQL workloads in Copenhagen. With my B.Sc. in Computer "
+                "Science from the University of Copenhagen and production experience at Nordic Cloud "
+                "Labs, I bring practical backend and cloud delivery skills."
+            ),
+            (
+                "At Nordic Cloud Labs, I built FastAPI microservices handling ~1,200 daily requests "
+                "with 99.9% uptime and provisioned GCP Cloud Run services alongside Cloud SQL instances "
+                "using Pulumi IaC. Working across both application code and Docker-based infrastructure "
+                "taught me how small schema mismatches become production incidents and how clear tests "
+                "keep services dependable under load."
+            ),
+            (
+                "In my OpenTelemetry Log Router project, I also reduced log ingestion overhead by 35% "
+                "via deterministic pre-filtering in Python. While I have not yet operated Go services "
+                "in production, my foundation in strictly typed Python services and cloud tooling "
+                "translates cleanly to learning new backend stacks quickly."
+            ),
+            (
+                "CloudNord ApS looks like an engineering team focused on pragmatic architecture and "
+                "steady delivery. I would welcome the chance to discuss how my FastAPI, PostgreSQL, "
+                "and GCP background can support your backend squad."
+            ),
+        ],
+        sign_off="Kind Regards,",
+    )
+
+
+def _build_stage2_fake_client() -> _FakeCliLLMClient:
+    """Create a deterministic fake LLM client supporting full Stage 2 draft + review flows."""
+    intent_turn = 0
+    reiterate_done = False
+
+    def _plan_handler(_tier: ModelTier, _sys: str, user_prompt: str) -> TailoringPlan:
+        note_suffix = "Emphasize FastAPI reliability." if "emphasize" in user_prompt.lower() else ""
+        return TailoringPlan(
+            angle_summary="Bridge Nordic Cloud Labs FastAPI and Pulumi work to CloudNord ApS.",
+            selected_experiences=["Nordic Cloud Labs - Junior Software Engineer"],
+            selected_projects=["OpenTelemetry Log Router"],
+            transferable_framings=["Map Pulumi GCP IaC to cloud deployment pipelines."],
+            major_gaps=["Go production experience"],
+            section_order=["experience", "projects", "education", "skills"],
+            notes=note_suffix or "Standard tailored draft.",
+        )
+
+    def _writer_handler(_tier: ModelTier, _sys: str, _user: str) -> DraftDocuments:
+        summary_note = "Focused on deterministic Python services." if reiterate_done else ""
+        return DraftDocuments(
+            cv=_grounded_example_cv(summary_note=summary_note),
+            cover_letter=_grounded_example_cover_letter(),
+            major_gaps=["Go production experience"],
+        )
+
+    def _audit_handler(_tier: ModelTier, _sys: str, _user: str) -> AuditResult:
+        return AuditResult(passed=True, violations=[])
+
+    def _intent_handler(_tier: ModelTier, _sys: str, _user: str) -> ThreadIntentDecision:
+        nonlocal intent_turn
+        intent_turn += 1
+        if intent_turn == 1:
+            return ThreadIntentDecision(intent="CHAT", rationale="User asked a question.")
+        return ThreadIntentDecision(intent="REITERATE", rationale="User requested CV emphasis update.")
+
+    def _ideation_handler(_tier: ModelTier, _sys: str, _user: str) -> IdeationResponse:
+        nonlocal reiterate_done
+        if intent_turn == 1:
+            return IdeationResponse(
+                reply="We left Go out because only verified Python and GCP facts appear in your profile.",
+                captured_ideation_note="Keep Python and GCP framing central.",
+            )
+        reiterate_done = True
+        return IdeationResponse(
+            reply="Updating the CV and cover letter now.",
+            captured_ideation_note="Emphasize deterministic Python services in summary.",
+        )
+
+    return _FakeCliLLMClient(
+        {
+            TailoringPlan: _plan_handler,
+            DraftDocuments: _writer_handler,
+            AuditResult: _audit_handler,
+            ThreadIntentDecision: _intent_handler,
+            IdeationResponse: _ideation_handler,
+        }
+    )
+
+
+def _seed_cli_queued_job(
+    repo: JobRepository,
+    job_id: str,
+    *,
+    company: str = "CloudNord ApS",
+    title: str = "Junior Backend Engineer",
+    apply_url: str = "https://cloudnord.example.com/jobs/junior-backend",
+    posted_at: datetime | None = None,
+    application_deadline: datetime | None = None,
+    source: str = "arbeitnow",
+    fit_score: float = 8.6,
+    created_at: datetime | None = None,
+    missing_posted_at: bool | None = None,
+) -> None:
+    """Insert a Queued_For_Drafting job with persisted FitDecision breakdown."""
+    posting = _make_posting(
+        job_id=job_id,
+        source=source,
+        company=company,
+        title=title,
+        apply_url=apply_url,
+        posted_at=posted_at,
+        application_deadline=application_deadline,
+    )
+    repo.insert_job(posting, ApplicationStatus.QUEUED_FOR_DRAFTING, created_at=created_at)
+    is_missing_posted_at = (posted_at is None) if missing_posted_at is None else missing_posted_at
+    decision = FitDecision(
+        passed=True,
+        status=ApplicationStatus.QUEUED_FOR_DRAFTING,
+        fit_score=fit_score,
+        must_have_coverage=0.9,
+        effective_tier="entry_level",
+        tier_threshold=0.65,
+        missing_posted_at=is_missing_posted_at,
+        evidence=ScoringEvidence(
+            seniority_tier="entry_level",
+            must_have_skills=["Python", "FastAPI", "PostgreSQL"],
+            direct_matches=["Python", "FastAPI", "PostgreSQL"],
+            role_seniority_score=9.0,
+            must_have_skills_score=9.0,
+            domain_fit_score=8.5,
+            nice_to_have_score=7.5,
+            major_gaps=["Go production experience"],
+            rationale="Strong entry-level Python backend match.",
+        ),
+    )
+    repo.update_job(
+        job_id,
+        fit_score=decision.fit_score,
+        fit_breakdown_json=decision.to_breakdown_json(),
+    )
+
+
+def test_cli_score_evaluates_pending_and_fails_loudly_without_api_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = CliRunner()
+    db_path = tmp_path / "score.db"
+    prefs_path = tmp_path / "target_roles.yaml"
+    profile_path = tmp_path / "master_profile.yaml"
+    llm_path = tmp_path / "llm.yaml"
+    prefs_path.write_text(EXAMPLE_PREFS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    profile_path.write_text(EXAMPLE_PROFILE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    llm_path.write_text(EXAMPLE_LLM_CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+
+    repo = JobRepository(db_path)
+    repo.insert_job(
+        _make_posting(job_id="pend_pass_0001", title="Junior Python Engineer", posted_at=None),
+        ApplicationStatus.PENDING_SCORING,
+        created_at=FIXED_NOW,
+    )
+    repo.insert_job(
+        _make_posting(job_id="pend_fail_0002", title="Lead Architect", posted_at=FIXED_NOW),
+        ApplicationStatus.PENDING_SCORING,
+        created_at=FIXED_NOW + timedelta(minutes=1),
+    )
+
+    # Without OPENCODE_API_KEY, default OpenCodeLLMClient fails loudly
+    monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
+    missing_key_result = runner.invoke(
+        app,
+        [
+            "score",
+            "--preferences",
+            str(prefs_path),
+            "--profile",
+            str(profile_path),
+            "--llm-config",
+            str(llm_path),
+            "--db",
+            str(db_path),
+        ],
+    )
+    assert missing_key_result.exit_code != 0
+    assert "OPENCODE_API_KEY" in missing_key_result.stderr
+
+    # With fake client factory, evaluates all pending into Queued_For_Drafting / Scored_Out
+    def _scoring_handler(_tier: ModelTier, _sys: str, user_prompt: str) -> ScoringEvidence:
+        payload = json.loads(user_prompt)
+        if payload["job"]["job_id"] == "pend_pass_0001":
+            return ScoringEvidence(
+                seniority_tier="entry_level",
+                must_have_skills=["Python", "SQL"],
+                direct_matches=["Python", "SQL"],
+                role_seniority_score=9.0,
+                must_have_skills_score=9.0,
+                domain_fit_score=8.5,
+                nice_to_have_score=8.0,
+                major_gaps=[],
+                rationale="Strong entry-level match.",
+            )
+        return ScoringEvidence(
+            seniority_tier="senior_plus",
+            inferred_min_years=7,
+            seniority_signals=["Lead Architect", "7+ years"],
+            must_have_skills=["Architecture"],
+            missing_must_haves=["Architecture"],
+            role_seniority_score=3.0,
+            must_have_skills_score=3.0,
+            domain_fit_score=5.0,
+            nice_to_have_score=4.0,
+            major_gaps=["7+ years experience"],
+            rationale="Too senior.",
+        )
+
+    fake_client = _FakeCliLLMClient({ScoringEvidence: _scoring_handler})
+    monkeypatch.setattr("job_agent.cli._default_llm_client_factory", lambda _path: fake_client)
+
+    result = runner.invoke(
+        app,
+        [
+            "score",
+            "--preferences",
+            str(prefs_path),
+            "--profile",
+            str(profile_path),
+            "--llm-config",
+            str(llm_path),
+            "--db",
+            str(db_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "evaluated=2" in result.stdout
+    assert "queued=1" in result.stdout
+    assert "scored-out=1" in result.stdout
+    assert "missing-posted-at=1" in result.stdout
+
+    assert repo.get_job("pend_pass_0001").status == ApplicationStatus.QUEUED_FOR_DRAFTING
+    assert repo.get_job("pend_fail_0002").status == ApplicationStatus.SCORED_OUT
+
+
+def test_cli_queue_prints_count_and_queued_rows(tmp_path: Path) -> None:
+    runner = CliRunner()
+    db_path = tmp_path / "queue.db"
+    prefs_path = tmp_path / "target_roles.yaml"
+    prefs_path.write_text(EXAMPLE_PREFS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+
+    empty_res = runner.invoke(app, ["queue", "--preferences", str(prefs_path), "--db", str(db_path)])
+    assert empty_res.exit_code == 0, empty_res.output
+    assert "Queued for drafting: 0" in empty_res.stdout
+
+    repo = JobRepository(db_path)
+    _seed_cli_queued_job(
+        repo,
+        "q_job_0001",
+        company="Nordic Cloud Labs",
+        title="Junior Python Developer",
+        apply_url="https://nordic.example.com/jobs/1",
+        posted_at=FIXED_NOW - timedelta(days=1),
+        application_deadline=FIXED_NOW + timedelta(days=7),
+        fit_score=8.75,
+        created_at=FIXED_NOW,
+    )
+    _seed_cli_queued_job(
+        repo,
+        "q_job_0002",
+        company="Copenhagen Data",
+        title="Associate Data Engineer",
+        apply_url="https://cphdata.example.com/jobs/2",
+        posted_at=None,
+        fit_score=8.1,
+        created_at=FIXED_NOW + timedelta(minutes=1),
+    )
+    repo.insert_job(
+        _make_posting(job_id="other_pending"),
+        ApplicationStatus.PENDING_SCORING,
+        created_at=FIXED_NOW,
+    )
+
+    res = runner.invoke(app, ["queue", "--preferences", str(prefs_path), "--db", str(db_path)])
+    assert res.exit_code == 0, res.output
+    assert "Queued for drafting: 2" in res.stdout
+    assert "q_job_0001" in res.stdout
+    assert "Nordic Cloud Labs" in res.stdout
+    assert "https://nordic.example.com/jobs/1" in res.stdout
+    assert "8.75" in res.stdout
+    assert "q_job_0002" in res.stdout
+    assert "https://cphdata.example.com/jobs/2" in res.stdout
+    assert "other_pending" not in res.stdout
+
+
+def test_cli_draft_expires_stale_and_respects_daily_draft_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = CliRunner()
+    db_path = tmp_path / "draft.db"
+    checkpoints_path = tmp_path / "checkpoints.db"
+    drafts_dir = tmp_path / "drafts"
+    prefs_path = tmp_path / "target_roles.yaml"
+    profile_path = tmp_path / "master_profile.yaml"
+    llm_path = tmp_path / "llm.yaml"
+    prefs_path.write_text(EXAMPLE_PREFS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    profile_path.write_text(EXAMPLE_PROFILE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    llm_path.write_text(EXAMPLE_LLM_CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+
+    fake_client = _build_stage2_fake_client()
+    monkeypatch.setattr("job_agent.cli._default_llm_client_factory", lambda _path: fake_client)
+
+    # Empty queue exits 0 cleanly (cap, never a quota)
+    empty_res = runner.invoke(
+        app,
+        [
+            "draft",
+            "--preferences",
+            str(prefs_path),
+            "--profile",
+            str(profile_path),
+            "--llm-config",
+            str(llm_path),
+            "--db",
+            str(db_path),
+            "--checkpoints",
+            str(checkpoints_path),
+            "--drafts-dir",
+            str(drafts_dir),
+        ],
+    )
+    assert empty_res.exit_code == 0, empty_res.output
+    assert "No queued jobs to draft (expired=0)." in empty_res.stdout
+
+    repo = JobRepository(db_path)
+    now = datetime.now(timezone.utc)
+    # 1 stale job (should expire before drafting) + 4 fresh queued jobs (daily_draft_limit = 3)
+    _seed_cli_queued_job(
+        repo,
+        "stale_queued_0",
+        company="OldCo",
+        title="Old Junior Role",
+        apply_url="https://oldco.example.com/jobs/0",
+        posted_at=now - timedelta(days=30),
+        created_at=now - timedelta(days=5),
+    )
+    for idx in range(1, 5):
+        _seed_cli_queued_job(
+            repo,
+            f"fresh_queued_{idx}",
+            company="CloudNord ApS",
+            title=f"Junior Backend Engineer {idx}",
+            apply_url=f"https://cloudnord.example.com/jobs/{idx}",
+            posted_at=now - timedelta(days=1),
+            created_at=now - timedelta(minutes=10 - idx),
+        )
+
+    result = runner.invoke(
+        app,
+        [
+            "draft",
+            "--preferences",
+            str(prefs_path),
+            "--profile",
+            str(profile_path),
+            "--llm-config",
+            str(llm_path),
+            "--db",
+            str(db_path),
+            "--checkpoints",
+            str(checkpoints_path),
+            "--drafts-dir",
+            str(drafts_dir),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Workshopping now..." in result.stdout
+    assert "Apply URL: https://cloudnord.example.com/jobs/1" in result.stdout
+    assert "Apply URL: https://cloudnord.example.com/jobs/2" in result.stdout
+    assert "Apply URL: https://cloudnord.example.com/jobs/3" in result.stdout
+    assert "Apply URL: https://cloudnord.example.com/jobs/4" not in result.stdout
+    assert "CV PDF:" in result.stdout
+    assert "Cover Letter PDF:" in result.stdout
+    assert "drafted=3, expired=1" in result.stdout
+
+    assert repo.get_job("stale_queued_0").status == ApplicationStatus.EXPIRED
+    for idx in range(1, 4):
+        stored = repo.get_job(f"fresh_queued_{idx}")
+        assert stored.status == ApplicationStatus.PENDING_REVIEW
+        assert stored.cv_pdf_path is not None and Path(stored.cv_pdf_path).is_file()
+        assert stored.cover_letter_pdf_path is not None and Path(stored.cover_letter_pdf_path).is_file()
+    assert repo.get_job("fresh_queued_4").status == ApplicationStatus.QUEUED_FOR_DRAFTING
+
+
+def test_cli_review_chat_reiterate_and_approve_flow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = CliRunner()
+    db_path = tmp_path / "review.db"
+    checkpoints_path = tmp_path / "checkpoints.db"
+    drafts_dir = tmp_path / "drafts"
+    prefs_path = tmp_path / "target_roles.yaml"
+    profile_path = tmp_path / "master_profile.yaml"
+    llm_path = tmp_path / "llm.yaml"
+    prefs_path.write_text(EXAMPLE_PREFS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    profile_path.write_text(EXAMPLE_PROFILE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    llm_path.write_text(EXAMPLE_LLM_CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+
+    fake_client = _build_stage2_fake_client()
+    monkeypatch.setattr("job_agent.cli._default_llm_client_factory", lambda _path: fake_client)
+
+    repo = JobRepository(db_path)
+    _seed_cli_queued_job(
+        repo,
+        "rev_job_001",
+        company="CloudNord ApS",
+        title="Junior Backend Engineer",
+        apply_url="https://cloudnord.example.com/jobs/review-me",
+        posted_at=None,
+        created_at=FIXED_NOW,
+        missing_posted_at=True,
+    )
+
+    # First draft via CLI so review attaches to existing Pending_Review checkpoint
+    draft_res = runner.invoke(
+        app,
+        [
+            "draft",
+            "--preferences",
+            str(prefs_path),
+            "--profile",
+            str(profile_path),
+            "--llm-config",
+            str(llm_path),
+            "--db",
+            str(db_path),
+            "--checkpoints",
+            str(checkpoints_path),
+            "--drafts-dir",
+            str(drafts_dir),
+        ],
+    )
+    assert draft_res.exit_code == 0, draft_res.output
+    assert repo.get_job("rev_job_001").status == ApplicationStatus.PENDING_REVIEW
+
+    # Interactive review: CHAT -> REITERATE -> /approve
+    review_res = runner.invoke(
+        app,
+        [
+            "review",
+            "rev_job_001",
+            "--preferences",
+            str(prefs_path),
+            "--profile",
+            str(profile_path),
+            "--llm-config",
+            str(llm_path),
+            "--db",
+            str(db_path),
+            "--checkpoints",
+            str(checkpoints_path),
+            "--drafts-dir",
+            str(drafts_dir),
+        ],
+        input=(
+            "Why is Go missing from the draft?\n"
+            "Please emphasize deterministic Python services and regenerate.\n"
+            "/approve\n"
+        ),
+    )
+    assert review_res.exit_code == 0, review_res.output
+    assert "Apply URL: https://cloudnord.example.com/jobs/review-me" in review_res.stdout
+    assert "Warning: posted_at is missing" in review_res.stdout
+    assert "Major gaps: Go production experience" in review_res.stdout
+    assert (
+        "Co-Pilot: We left Go out because only verified Python and GCP facts appear in your profile."
+        in review_res.stdout
+    )
+    assert "Workshopping now..." in review_res.stdout
+    assert "Approved! Status: Ready_to_Submit" in review_res.stdout
+
+    final_job = repo.get_job("rev_job_001")
+    assert final_job is not None
+    assert final_job.status == ApplicationStatus.READY_TO_SUBMIT
+    assert final_job.cv_pdf_path is not None and Path(final_job.cv_pdf_path).is_file()
+    assert final_job.cover_letter_pdf_path is not None and Path(final_job.cover_letter_pdf_path).is_file()
+
+
+def test_cli_review_empty_exit_and_dismiss_flows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = CliRunner()
+    db_path = tmp_path / "review_dismiss.db"
+    checkpoints_path = tmp_path / "checkpoints.db"
+    drafts_dir = tmp_path / "drafts"
+    prefs_path = tmp_path / "target_roles.yaml"
+    profile_path = tmp_path / "master_profile.yaml"
+    llm_path = tmp_path / "llm.yaml"
+    prefs_path.write_text(EXAMPLE_PREFS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    profile_path.write_text(EXAMPLE_PROFILE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    llm_path.write_text(EXAMPLE_LLM_CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+
+    fake_client = _build_stage2_fake_client()
+    monkeypatch.setattr("job_agent.cli._default_llm_client_factory", lambda _path: fake_client)
+
+    repo = JobRepository(db_path)
+    _seed_cli_queued_job(
+        repo,
+        "rev_dismiss_002",
+        apply_url="https://cloudnord.example.com/jobs/dismiss-me",
+        posted_at=datetime.now(timezone.utc) - timedelta(days=1),
+        created_at=FIXED_NOW,
+    )
+
+    # Opening review directly on a Queued_For_Drafting job drafts it first; /exit leaves Pending_Review
+    exit_res = runner.invoke(
+        app,
+        [
+            "review",
+            "rev_dismiss_002",
+            "--preferences",
+            str(prefs_path),
+            "--profile",
+            str(profile_path),
+            "--llm-config",
+            str(llm_path),
+            "--db",
+            str(db_path),
+            "--checkpoints",
+            str(checkpoints_path),
+            "--drafts-dir",
+            str(drafts_dir),
+        ],
+        input="/exit\n",
+    )
+    assert exit_res.exit_code == 0, exit_res.output
+    assert "Workshopping now..." in exit_res.stdout
+    assert repo.get_job("rev_dismiss_002").status == ApplicationStatus.PENDING_REVIEW
+
+    # Empty input / EOF also exits cleanly without changing status
+    eof_res = runner.invoke(
+        app,
+        [
+            "review",
+            "rev_dismiss_002",
+            "--preferences",
+            str(prefs_path),
+            "--profile",
+            str(profile_path),
+            "--llm-config",
+            str(llm_path),
+            "--db",
+            str(db_path),
+            "--checkpoints",
+            str(checkpoints_path),
+            "--drafts-dir",
+            str(drafts_dir),
+        ],
+        input="",
+    )
+    assert eof_res.exit_code == 0, eof_res.output
+    assert repo.get_job("rev_dismiss_002").status == ApplicationStatus.PENDING_REVIEW
+
+    # /dismiss transitions to Rejected
+    dismiss_res = runner.invoke(
+        app,
+        [
+            "review",
+            "rev_dismiss_002",
+            "--preferences",
+            str(prefs_path),
+            "--profile",
+            str(profile_path),
+            "--llm-config",
+            str(llm_path),
+            "--db",
+            str(db_path),
+            "--checkpoints",
+            str(checkpoints_path),
+            "--drafts-dir",
+            str(drafts_dir),
+        ],
+        input="/dismiss\n",
+    )
+    assert dismiss_res.exit_code == 0, dismiss_res.output
+    assert "Dismissed. Status: Rejected" in dismiss_res.stdout
+    assert repo.get_job("rev_dismiss_002").status == ApplicationStatus.REJECTED
