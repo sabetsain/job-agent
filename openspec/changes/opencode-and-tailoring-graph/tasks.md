@@ -15,9 +15,9 @@
 
 ## 3. OpenCode Go Client & Startup-Loaded System Prompts
 
-- [ ] 3.1 Implement `src/job_agent/llm/client.py` providing the injectable `StructuredLLMClient` protocol, dual-tier `langchain_openai.ChatOpenAI` factory (`scoring` and `reasoning` clients), native `with_structured_output(schema)` invocation with bounded parse-repair retries (`max_parse_retries`), and fail-loud missing env-var checks.
-- [ ] 3.2 Author dedicated, version-controlled system prompts under `src/job_agent/prompts/`: `scorer.md` (diverse transferable-skill examples, clear senior+ years/scope tell-tales, non-technical role detection), `planner.md` (explicit major-gap criteria, 1-page selection), `writer.md` (synthesizing `application-voice` rules for `da` and `en`), `auditor.md` (synthesizing `blader/humanizer` rules, truthfulness, Danish naturalness, surgical `AuditViolation` output), `ideation.md` (human-as-final-source-of-truth profile addition & drift detection), and `intent_router.md` (biased safely toward `CHAT` vs. explicit `REITERATE`).
-- [ ] 3.3 Implement `src/job_agent/prompts/loader.py` to load and cache all 6 required prompts automatically on startup (failing fast if any prompt is missing or empty) and add unit tests in `tests/test_llm_and_prompts.py`.
+- [x] 3.1 Implement `src/job_agent/llm/client.py` providing the injectable `StructuredLLMClient` protocol, dual-tier `langchain_openai.ChatOpenAI` factory (`scoring` and `reasoning` clients), native `with_structured_output(schema)` invocation with bounded parse-repair retries (`max_parse_retries`), and fail-loud missing env-var checks.
+- [x] 3.2 Author dedicated, version-controlled system prompts under `src/job_agent/prompts/`: `scorer.md` (diverse transferable-skill examples, clear senior+ years/scope tell-tales, non-technical role detection), `planner.md` (explicit major-gap criteria, 1-page selection), `writer.md` (synthesizing `application-voice` rules for `da` and `en`), `auditor.md` (synthesizing `blader/humanizer` rules, truthfulness, Danish naturalness, surgical `AuditViolation` output), `ideation.md` (human-as-final-source-of-truth profile addition & drift detection), and `intent_router.md` (biased safely toward `CHAT` vs. explicit `REITERATE`).
+- [x] 3.3 Implement `src/job_agent/prompts/loader.py` to load and cache all 6 required prompts automatically on startup (failing fast if any prompt is missing or empty) and add unit tests in `tests/test_llm_and_prompts.py`.
 
 ## 4. Stage 1 Fit Scorer & Curated Scoring Evals Suite
 
