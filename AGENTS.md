@@ -16,3 +16,23 @@
 ## Session Handoff
 
 - Latest session handoff document: `/Users/sebastianmcconnell/.gemini/handoffs/job-agent-schemas-and-ingestion-handoff.md`
+
+# General Instructions
+
+- **Trigger:** You need to explain a bug, issue, implementation, or idea to the user.
+  - **Action:** Add abstract, high-level context to cushion your explanation.
+
+- **Trigger:** Once the intent of a session is clear and there is a relevant handoff document in the `.handoffs/` directory at the project root.
+  - **Action:** Read the handoff. Always update the existing handoff document instead of making a new one.
+
+- **Trigger:** Uncertainty about user query.
+  - **Action:** Ask clarifying questions.
+
+- **Trigger:** Need a container environment.
+  - **Action:** Check for active podman before any other tooling.
+
+- **Trigger:** Managing local branches or version control with git.
+  - **Action:** Use gh stack for local branch work: init, add, submit, sync, rebase, view, up/down. Refer to /create-pr skill as needed.
+
+- **Trigger:** Starting work on a clean project (or any workspace without an initialized OpenSpec setup).
+  - **Action:** Check silently whether the `openspec` CLI is installed (`openspec --version`) and whether the project has OpenSpec initialized (`openspec/` at the project root or a configured store in `openspec/config.yaml`). **Never prompt the user.** If `openspec` is not installed, install it non-interactively (`npm install -g @fission-ai/openspec@latest`, or run via `npx @fission-ai/openspec@latest`). If OpenSpec is not initialized in the project, run `openspec init --scope project --tools antigravity --force` so both `openspec/` and project-scoped `.agents/skills/` are provisioned cleanly without interactive prompts — including in remote Antigravity sessions. OpenSpec skills may also live in a dedicated `openspec/` or `.agents/skills/` directory.
